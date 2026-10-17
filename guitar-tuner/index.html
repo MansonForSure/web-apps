@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#182322">
   <meta name="description" content="A private, microphone-based six-string guitar tuner. Tune standard E A D G B E in your browser, with reference tones and a demo mode.">
-  <title>Pitch — a pocket guitar tuner</title>
+  <title>Pitch — guitar tuner</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
@@ -14,14 +14,9 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="wordmark" href="./" aria-label="Guitar tuner home"><span class="brand-mark" aria-hidden="true">∿</span>pitch<span class="brand-period">.</span></a>
-      <span class="header-caption">YOUR POCKET GUITAR TUNER</span>
+      <h1 id="page-title">Guitar tuner</h1>
     </header>
     <main>
-      <section class="intro" aria-labelledby="page-title">
-        <div><p class="eyebrow">SIX STRINGS. ONE GOOD SOUND.</p><h1 id="page-title">Find your <em>pitch.</em></h1><p class="intro-copy">A clear note. A small adjustment. Back to playing.</p></div>
-        <div class="privacy-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v6c0 4.5 7.5 9 7.5 9s7.5-4.5 7.5-9V6L12 3Z"/><path d="m8 12 3 3 5-6"/></svg><span>Your microphone stays<br><strong>on your device.</strong></span></div>
-      </section>
-
       <section class="instrument" aria-label="Guitar tuner">
         <div class="instrument-top"><div class="specs"><span class="spec-chip">STANDARD GUITAR</span><span class="reference-pitch">A4 = 440 Hz</span></div><span class="source-badge" id="source-badge"><span class="source-dot"></span><span id="source-label">MICROPHONE OFF</span></span></div>
         <div class="pitch-display">
@@ -40,16 +35,22 @@
         <div class="signal-row"><span>INPUT LEVEL</span><div class="signal-track" aria-hidden="true"><div id="signal-level"></div></div><span id="signal-label">NO INPUT</span></div>
 
         <section class="string-section" aria-label="Choose a guitar string">
-          <div class="string-heading"><div><h2>One string at a time.</h2><p>Choose a target, or let the tuner find it.</p></div><button class="auto-button" id="auto-button" aria-pressed="true">AUTO<span class="auto-dot"></span></button></div>
+          <div class="string-heading"><h2>Strings</h2><button class="auto-button" id="auto-button" aria-pressed="true">AUTO<span class="auto-dot"></span></button></div>
           <div class="strings" id="strings"></div>
-          <div class="string-footer"><span>6 → 1 &nbsp; THICKEST TO THINNEST</span><button id="reference-button" class="reference-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4ZM17 8a6 6 0 0 1 0 8M20 5a10 10 0 0 1 0 14"/></svg><span id="reference-label">Hear E2 reference</span></button></div>
+          <div class="string-footer"><button id="reference-button" class="reference-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4ZM17 8a6 6 0 0 1 0 8M20 5a10 10 0 0 1 0 14"/></svg><span id="reference-label">Hear E2 reference</span></button></div>
         </section>
       </section>
 
-      <section class="practice-notes" aria-label="Tuning tips"><div><span class="tip-number">01</span><div><h2>Let a single string ring.</h2><p>Pluck gently and mute the other strings. A quiet room gives a clearer reading.</p></div></div><div><span class="tip-number">02</span><div><h2>Make a little adjustment.</h2><p>Left of centre? Tune up. Right of centre? Tune down. Within ±5 cents shows as in tune.</p></div></div></section>
-      <div class="help-row"><details><summary>Microphone not working?</summary><p>Open this page directly in Safari, Chrome, Edge, or Firefox, then allow microphone access. A public link must use HTTPS. If you denied access, change the microphone permission in your browser's website settings. Some social-app browsers block microphones; open the link in your main browser instead. A quiet electric guitar may need an audio interface.</p></details><details><summary>What happens to my audio?</summary><p>Your audio is analysed live inside this browser. Nothing is recorded, saved, or uploaded. Stop tuning, leave the page, or switch tabs to release the microphone. Reference tones are generated on your device. Demo mode is simulated input, not a microphone reading.</p></details></div>
+      <div class="help-row">
+        <details>
+          <summary>Help</summary>
+          <p>Pluck one string at a time. Left of centre: tune up. Right: tune down. Green means within ±5 cents.</p>
+          <p>No microphone? Open the HTTPS link in your main browser and allow microphone access in its website settings. A quiet electric guitar may need an audio interface.</p>
+          <p>Audio stays in this browser; nothing is recorded or uploaded. Stop tuning or switch tabs to release the microphone. Demo input is simulated.</p>
+          <p><a href="./licenses.txt">Licenses</a></p>
+        </details>
+      </div>
     </main>
-    <footer class="site-footer"><span>Less setup. More playing.</span><div><a href="https://github.com/MansonForSure/web-apps" target="_blank" rel="noopener noreferrer">Source code ↗</a><a href="./licenses.txt">Licenses</a></div></footer>
   </div>
   <noscript><p class="noscript">This tuner needs JavaScript to analyse sound. Please enable JavaScript in your browser.</p></noscript>
 </body>

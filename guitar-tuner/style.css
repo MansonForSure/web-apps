@@ -64,8 +64,8 @@ svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 100px;
-  border-bottom: 1px solid #d7dcd2;
+  height: 80px;
+  margin-bottom: 16px;
 }
 .wordmark {
   text-decoration: none;
@@ -107,14 +107,10 @@ svg {
   color: var(--muted);
 }
 h1 {
-  font-family:
-    Georgia,
-    "Times New Roman",
-    serif;
-  font-size: 57px;
-  font-weight: normal;
-  letter-spacing: -2.7px;
-  line-height: 1.1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.4;
   margin: 0;
 }
 h1 em {
@@ -495,7 +491,7 @@ body[data-tuning=error] #status {
   font-weight: normal;
   font-size: 21px;
   letter-spacing: -.2px;
-  margin: 0 0 6px;
+  margin: 0;
 }
 .string-heading p {
   font-size: 10px;
@@ -586,7 +582,7 @@ body[data-tuning=error] #status {
 .string-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: 17px;
   gap: 10px;
 }
@@ -645,7 +641,6 @@ body[data-tuning=error] #status {
   display: flex;
   gap: 36px;
   padding: 23px 0;
-  border-bottom: 1px solid #d6dccf;
 }
 .help-row details {
   flex: 1;
@@ -721,7 +716,8 @@ body[data-tuning=error] #status {
     max-width: 560px;
   }
   .site-header {
-    height: 79px;
+    height: 64px;
+    margin-bottom: 12px;
   }
   .wordmark {
     font-size: 31px;
@@ -742,8 +738,7 @@ body[data-tuning=error] #status {
     letter-spacing: 1.6px;
   }
   h1 {
-    font-size: 43px;
-    letter-spacing: -2px;
+    font-size: 12px;
   }
   .intro-copy {
     font-size: 11px;
