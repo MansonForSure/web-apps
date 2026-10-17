@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#131514">
+  <meta name="description" content="Find the BPM of live music with your microphone. Real-time tempo estimation, private on-device audio processing, and tap tempo.">
+  <title>Pulse — Live BPM Meter</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css?v=1">
+  <script type="module" src="./app.js?v=1"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="wordmark" href="./" aria-label="Pulse home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>PULSE<span class="brand-detail">LIVE BPM</span></a>
+      <span class="privacy-pill"><span aria-hidden="true">●</span> Audio stays on your device</span>
+    </header>
+    <main>
+      <div class="intro"><div><p class="eyebrow">A LITTLE TOOL FOR EVERY BEAT</p><h1>Your music.<br><span>Measured live.</span></h1></div><p class="intro-note">Listen to the room. Find the tempo.<br>No uploads. No recordings. Just rhythm.</p></div>
+      <section class="instrument" aria-label="Live tempo meter">
+        <div class="instrument-top"><span class="instrument-label"><span id="statusDot" class="status-dot"></span><span id="status" role="status">MICROPHONE OFF</span></span><span class="session-label">SESSION <span id="sessionTime">00:00</span></span></div>
+        <div id="demoNotice" class="demo-notice" hidden>SYNTHETIC DEMO · 120 BPM test pattern · microphone not used</div>
+        <div class="meter-layout">
+          <div class="readout"><div class="number-line"><span id="bpm" class="bpm-number" aria-label="Estimated BPM">—</span><span class="bpm-unit">BPM</span></div><p id="readingNote" class="reading-note">The next beat starts with you.</p>
+            <div class="tempo-adjust" role="group" aria-label="Interpret the musical pulse"><button data-multiplier="0.5" disabled>½ time</button><button data-multiplier="1" aria-pressed="true" class="selected" disabled>Original</button><button data-multiplier="2" disabled>2× time</button></div>
+          </div>
+          <aside class="signal-panel"><div class="signal-heading"><span class="eyebrow">RHYTHM CONFIDENCE</span><span id="confidenceValue" class="confidence-value">—</span></div><div class="confidence-track" role="progressbar" id="confidenceBar" aria-label="Rhythmic consistency" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="confidenceFill"></div></div><p id="confidenceNote">Waiting for a steady rhythm.</p><div class="input-label"><span>INPUT LEVEL</span><span id="inputDb">— dB</span></div><div class="level-meter" aria-hidden="true"><div id="levelFill"></div></div><p class="confidence-footnote">Confidence is a rhythm-consistency estimate, not a guarantee of accuracy.</p></aside>
+        </div>
+        <div class="activity-section"><div class="activity-heading"><span>RHYTHM ACTIVITY</span><span id="activityLabel">LIVE INPUT · LAST 3 SECONDS</span></div><canvas id="activity" height="100" role="img" aria-label="Recent audio rhythm activity"></canvas><div class="activity-scale"><span>−3 SEC</span><span>NOW</span></div></div>
+        <div class="controls"><button id="startButton" class="button primary"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Start listening</span></button><button id="stopButton" class="button stop" hidden><span class="stop-square" aria-hidden="true"></span>Stop listening</button><button id="demoButton" class="button secondary">Try a demo <span aria-hidden="true">↗</span></button><label id="demoAudioControl" class="demo-audio" hidden><input id="demoAudio" type="checkbox">Hear demo</label><p class="control-note" id="controlNote">Allow your microphone when prompted.</p></div>
+        <p id="message" class="message" role="alert" hidden></p>
+      </section>
+      <div class="below-instrument">
+        <section class="tap-card" aria-labelledby="tapHeading"><div class="tap-copy"><p class="eyebrow">KNOW THE FEELING?</p><h2 id="tapHeading">Tap it out.</h2><p>Tap along with the beat to compare.</p></div><div class="tap-controls"><button id="tapButton" class="button tap">Tap the beat <kbd>T</kbd></button><div class="tap-readout"><span id="tapBpm">—</span><span>BPM</span></div><button id="resetTap" class="text-button" aria-label="Reset tap tempo">Reset</button></div><p id="tapNote" class="tap-note" role="status">Tap at least 3 times. Keyboard T works too.</p></section>
+        <section class="tips" aria-labelledby="tipsHeading"><p class="eyebrow" id="tipsHeading">A BETTER READING</p><p><span class="tip-index">01</span> Let a steady section play for 6–15 seconds.</p><p><span class="tip-index">02</span> Keep your microphone near the music, away from conversation.</p><p><span class="tip-index">03</span> Half or double readings happen. Choose the pulse you hear.</p><p class="tips-small">Works best with clear drums or rhythmic accents. Free-time music, noise, and changing tempos can be harder to estimate. Listening stops when you leave this tab.</p></section>
+      </div>
+    </main>
+    <footer><span>MADE FOR THE MOMENT.</span><a href="https://github.com/MansonForSure/web-apps/tree/main/bpm-meter" target="_blank" rel="noopener noreferrer">View source <span aria-hidden="true">↗</span></a></footer>
+  </div>
+</body>
+</html>

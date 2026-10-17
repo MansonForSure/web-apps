@@ -1,0 +1,11 @@
+{
+  "name": "pulse-live-bpm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private, in-browser real-time microphone tempo estimator",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check app.js && node --check audio/feature-extractor.js && node --check audio/worklet.js && node --check audio/tempo-detector.js && node --check audio/tempo-worker.js"
+  }
+}
