@@ -33,5 +33,5 @@ test('essential help and licenses remain in one collapsed disclosure', () => {
   assert.match(html, /Demo input is simulated/);
   assert.match(html, /href="\.\/licenses\.txt"/);
   assert.match(html, /src="\.\/app\.js"/);
-  assert.match(html, /href="\.\/style\.css"/);
+  assert.match(html, /href="\.\/style\.css\?v=compact-20261017"/);
 });
