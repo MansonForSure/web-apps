@@ -1,0 +1,15 @@
+{
+  "name": "pitch-guitar-tuner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A private, self-contained browser guitar tuner for GitHub Pages",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/app.js && node --check src/tuner.js && node --check scripts/build.mjs && node --check tests/tuner.test.js",
+    "test": "node --test tests/*.test.js",
+    "preview": "python3 -m http.server 8092 --bind 127.0.0.1 --directory .."
+  },
+  "dependencies": { "pitchy": "4.1.0" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}
