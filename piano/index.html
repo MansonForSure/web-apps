@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f5f4ed" />
+    <meta
+      name="description"
+      content="A little room to play. Turn your computer keyboard into a polyphonic piano with touch controls, sustain, and transpose. R is middle C. Free, private, and entirely in your browser."
+    />
+    <title>Keyroom — Your keyboard, a piano</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <link
+      rel="preload"
+      href="./assets/fonts/manrope.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./assets/fonts/instrument-serif.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <a class="wordmark" href="./" aria-label="Keyroom home"
+          ><span class="key-mark" aria-hidden="true"><i></i><i></i><i></i></span
+          >keyroom<span class="wordmark-dot">.</span></a
+        >
+        <div class="header-right">
+          <span class="eyebrow header-caption">A PIANO, RIGHT HERE.</span
+          ><button class="help-button" id="help-open" aria-label="How to play">
+            <span aria-hidden="true">?</span>
+          </button>
+        </div>
+      </header>
+      <main>
+        <section class="intro" aria-labelledby="title">
+          <div>
+            <div class="eyebrow intro-label">
+              <span class="small-rule"></span>THE BROWSER INSTRUMENT
+            </div>
+            <h1 id="title">A little room to play.</h1>
+            <p class="intro-copy">
+              Your keyboard. Your next melody.<br class="mobile-break" />
+              Press <kbd>R</kbd> for middle C, or touch the keys below.
+            </p>
+          </div>
+          <div class="note-monitor" aria-label="Currently held notes">
+            <div class="eyebrow">ON THE KEYS</div>
+            <div id="active-notes" class="active-notes">—</div>
+            <div id="note-count" class="note-count">Make a little music.</div>
+          </div>
+        </section>
+        <section class="instrument" aria-label="Piano instrument">
+          <div class="performance-bar">
+            <div class="instrument-name">
+              <span class="status-light" id="status-light"></span>
+              <div>
+                <strong>Studio piano</strong
+                ><span id="audio-status" role="status" aria-live="polite"
+                  >Press a key to enable sound</span
+                >
+              </div>
+              <button id="enable-audio" class="text-button">
+                Enable sound <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+            <div class="controls">
+              <div class="transpose-control">
+                <label class="control-label" for="transpose">TRANSPOSE</label>
+                <div class="stepper">
+                  <button
+                    id="transpose-down"
+                    aria-label="Transpose down one semitone"
+                  >
+                    −</button
+                  ><input
+                    id="transpose"
+                    type="number"
+                    min="-12"
+                    max="12"
+                    step="1"
+                    value="0"
+                    aria-label="Transpose in semitones"
+                  /><button
+                    id="transpose-up"
+                    aria-label="Transpose up one semitone"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  id="transpose-reset"
+                  class="reset-button"
+                  title="Reset transpose"
+                  aria-label="Reset transpose to zero"
+                >
+                  ↺
+                </button>
+              </div>
+              <div class="volume-control">
+                <label class="control-label" for="volume">VOLUME</label>
+                <div class="volume-line">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M11 5 6 9H3v6h3l5 4V5Zm4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"
+                    /></svg
+                  ><input
+                    id="volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="70"
+                    aria-label="Volume"
+                  /><output for="volume" id="volume-value">70%</output>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="piano-scroll" id="piano-scroll">
+            <div
+              class="piano"
+              id="piano"
+              role="group"
+              aria-label="Playable piano, G2 to D6"
+            ></div>
+          </div>
+          <div class="instrument-bottom">
+            <span id="pitch-hint"
+              >R → C4 <span class="divider-dot">·</span> 5 → C♯4
+              <span class="divider-dot">·</span> E → B3</span
+            ><span class="touch-hint"
+              >Play chords. Use all your fingers.<span class="scroll-hint">
+                Swipe the rail to explore ↔</span
+              ></span
+            >
+          </div>
+        </section>
+        <div class="utility-bar">
+          <div class="utility-left">
+            <button class="pedal-button" id="sustain" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 16 10-7 4 5-10 6-4-4ZM6 14V6m-3 4 3-4 3 4" /></svg
+              >Sustain <kbd>SPACE</kbd
+              ><span class="toggle-led" aria-hidden="true"></span></button
+            ><span class="utility-caption">Let the notes linger.</span>
+          </div>
+          <div class="utility-right">
+            <button id="labels" class="label-button" aria-pressed="true">
+              <span aria-hidden="true">Aa</span> Key labels</button
+            ><button id="stop-notes" class="stop-button">
+              <span class="stop-icon" aria-hidden="true"></span>All notes off
+              <kbd>ESC</kbd>
+            </button>
+          </div>
+        </div>
+        <section class="keyboard-guide" aria-labelledby="guide-title">
+          <div class="guide-heading">
+            <div>
+              <span class="eyebrow">MEET YOUR NEW INSTRUMENT</span>
+              <h2 id="guide-title">A keyboard that feels familiar.</h2>
+            </div>
+            <p>
+              Letters play the white keys. Numbers fill in the sharps.<br /><span
+                >1, 4, 7 and − are intentionally silent.</span
+              >
+            </p>
+          </div>
+          <div class="shortcut-scroll">
+            <div
+              class="shortcut-deck"
+              id="shortcut-deck"
+              aria-label="Playable computer keyboard layout"
+            ></div>
+          </div>
+          <div class="guide-footer">
+            <span
+              ><span class="legend-dot white-dot"></span>Natural notes
+              <span class="legend-dot black-dot"></span>Sharps
+              <span class="legend-dot green-dot"></span>Held notes</span
+            ><span>Multiple keys. Multiple notes. One melody.</span>
+          </div>
+        </section>
+      </main>
+      <footer class="site-footer">
+        <span>Made for the joy of playing.</span
+        ><span>NO DOWNLOADS. NO DISTRACTIONS.</span>
+      </footer>
+    </div>
+    <dialog id="help-dialog" aria-labelledby="help-title">
+      <div class="dialog-heading">
+        <span class="eyebrow">A QUICK TOUR</span
+        ><button id="help-close" aria-label="Close help">×</button>
+      </div>
+      <h2 id="help-title">Just put your fingers down.</h2>
+      <p>
+        Press the letter and number keys shown in the layout.
+        <strong>R is C4</strong>, <strong>5 is C♯4</strong>, and
+        <strong>E is B3</strong>. The 4 key is silent, as are 1, 7 and minus.
+        Hold several keys for a chord.
+      </p>
+      <p>
+        On a touchscreen, play the piano or the shortcut buttons with multiple
+        fingers. Slide a finger across the piano for a glissando. On a small
+        screen, swipe the strip beneath the keys to explore the range.
+      </p>
+      <p>
+        <strong>Transpose</strong> shifts the sound by up to 12 semitones in
+        either direction. The piano highlights the actual pitch; the
+        computer-key layout keeps your fingering the same. Changing transpose
+        releases held notes.
+      </p>
+      <p>
+        Hold <kbd>SPACE</kbd> for sustain, or tap the Sustain toggle. Press
+        <kbd>ESC</kbd> for all notes off. Key labels can be hidden. The first
+        key or Enable sound unlocks browser audio.
+      </p>
+      <div class="privacy-note">
+        Synthesized piano sound, made locally in your browser. No microphone, no
+        account, no uploaded audio. Some physical keyboards limit how many keys
+        can register together.
+      </div>
+    </dialog>
+    <noscript
+      >This piano needs JavaScript to generate sound. Please enable JavaScript
+      in your browser.</noscript
+    >
+  </body>
+</html>
