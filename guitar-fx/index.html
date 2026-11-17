@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0e10">
+  <meta name="description" content="Play your guitar through a live pedalboard in the browser: gate, compressor, auto-wah, drive, amp EQ, cabinet, phaser, chorus, tremolo, delay and reverb. Audio is processed on your device.">
+  <title>Stompbox — Live Guitar Effects</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css?v=1">
+  <script type="module" src="./app.js?v=1"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="wordmark" href="./" aria-label="Stompbox home">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="3" width="22" height="26" rx="4"/><circle cx="11" cy="10" r="2.6"/><circle cx="21" cy="10" r="2.6"/><circle cx="16" cy="21.5" r="4.2"/></svg>
+        <span>STOMPBOX</span><span class="brand-detail">LIVE GUITAR FX</span>
+      </a>
+      <div class="top-status"><span id="statusDot" class="status-dot" aria-hidden="true"></span><span id="status" role="status">OFF</span></div>
+      <button id="quickToggle" class="quick-toggle" type="button">Start</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <p class="eyebrow">REAL-TIME · ON-DEVICE · NO UPLOADS</p>
+      <h1>Plug in. <span>Stomp on.</span></h1>
+      <p class="intro-note">Run your guitar through a live pedalboard in the browser. Your audio is processed on this device and never leaves it.</p>
+    </section>
+
+    <section class="rack" aria-label="Input, output and transport">
+      <div class="scope-wrap">
+        <canvas id="scope" role="img" aria-label="Live output spectrum and waveform"></canvas>
+        <div class="scope-overlay"><span id="scopeLabel">OUTPUT · SPECTRUM + WAVE</span><span id="gpuBadge" class="gpu-badge">—</span></div>
+        <div id="demoNotice" class="demo-notice" hidden>SYNTHETIC DEMO RIFF · microphone not used</div>
+      </div>
+
+      <div class="io">
+        <div class="io-block">
+          <div class="io-head"><span>INPUT</span><span id="inDb" class="io-db">— dB</span><span id="inClip" class="clip" aria-label="Input clipping">CLIP</span></div>
+          <div class="meter" aria-hidden="true"><div id="inFill" class="meter-fill"></div><div id="inPeak" class="meter-peak"></div></div>
+          <div id="inputKnob" class="io-knob"></div>
+        </div>
+        <div class="io-block">
+          <div class="io-head"><span>OUTPUT</span><span id="outDb" class="io-db">— dB</span><span id="outLimit" class="clip limit" aria-label="Limiter active">LIMIT</span></div>
+          <div class="meter" aria-hidden="true"><div id="outFill" class="meter-fill out"></div><div id="outPeak" class="meter-peak"></div></div>
+          <div id="masterKnob" class="io-knob"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="startButton" class="button primary" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v8a5 5 0 0 0 10 0V3M12 16v5M8 21h8"/></svg>
+          <span>Start guitar input</span>
+        </button>
+        <button id="stopButton" class="button stop" type="button" hidden><span class="stop-square" aria-hidden="true"></span>Stop</button>
+        <button id="demoButton" class="button secondary" type="button">Play demo riff</button>
+        <button id="bypassButton" class="button ghost" type="button" aria-pressed="false">Bypass all</button>
+        <button id="resumeButton" class="button secondary" type="button" hidden>Resume audio</button>
+      </div>
+
+      <div class="setup-row">
+        <label class="field"><span>INPUT DEVICE</span>
+          <select id="deviceSelect" disabled><option value="">Default input</option></select>
+        </label>
+        <label class="field"><span>CHANNEL</span>
+          <select id="channelSelect">
+            <option value="mix">Mono mix</option>
+            <option value="left">Input 1 (left)</option>
+            <option value="right">Input 2 (right)</option>
+          </select>
+        </label>
+        <div class="field readout"><span>LATENCY</span><strong id="latency">—</strong></div>
+        <div class="field readout"><span>SAMPLE RATE</span><strong id="sampleRate">—</strong></div>
+      </div>
+
+      <p class="safety"><strong>Use headphones.</strong> A speaker next to the microphone will feed back and howl. Wired headphones or a guitar audio interface give the lowest delay. Bluetooth adds a noticeable lag.</p>
+      <p id="message" class="message" role="alert" hidden></p>
+    </section>
+
+    <section class="presets" aria-labelledby="presetsHeading">
+      <div class="section-head"><h2 id="presetsHeading">Presets</h2><span id="presetState" class="preset-state"></span></div>
+      <div id="presetList" class="preset-list" role="group" aria-label="Presets"></div>
+    </section>
+
+    <section class="board-section" aria-labelledby="boardHeading">
+      <div class="section-head"><h2 id="boardHeading">Signal chain</h2><p class="hint">Swipe a knob sideways to turn it · double-tap to reset</p></div>
+      <div id="chain" class="chain" role="group" aria-label="Quick pedal switches"></div>
+      <div id="board" class="board"></div>
+    </section>
+
+    <section class="guide" aria-labelledby="guideHeading">
+      <h2 id="guideHeading" class="visually-hidden">Setup guide</h2>
+      <article><p class="eyebrow">01 · CONNECT</p><h3>Get a clean signal in</h3><p>For an electric guitar, use a guitar audio interface (USB-C or Lightning) and plug headphones into it or into the phone. The built-in microphone works for acoustic guitar and quick tries. If your interface has two inputs, pick the input your guitar is plugged into under <em>Channel</em>.</p></article>
+      <article><p class="eyebrow">02 · GAIN STAGE</p><h3>Set Input, then Master</h3><p>Play hard and raise <em>Input</em> until the meter peaks around −12 dB without CLIP. Then set <em>Master</em> to a comfortable listening level. A limiter at the output keeps sudden peaks below 0 dB.</p></article>
+      <article><p class="eyebrow">03 · UNDER THE HOOD</p><h3>Where the GPU helps</h3><p>Effects run on the browser’s real-time audio thread with native filters, convolution and AudioWorklet code. That is the lowest-latency path. Sending 2.7 ms audio blocks to the GPU and back would add more delay than it saves. The GPU draws the live spectrum instead, which keeps the page smooth.</p></article>
+    </section>
+  </main>
+
+  <footer class="shell footer">
+    <span>NO ACCOUNT · NO RECORDING · NO UPLOADS</span>
+    <span class="footer-links"><a href="../guitar-tuner/">Tune first ↗</a><a href="https://github.com/MansonForSure/web-apps/tree/main/guitar-fx" target="_blank" rel="noopener noreferrer">View source ↗</a></span>
+  </footer>
+  <noscript><p class="message">Stompbox needs JavaScript to process audio.</p></noscript>
+</body>
+</html>

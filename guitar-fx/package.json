@@ -1,0 +1,11 @@
+{
+  "name": "stompbox-live-guitar-fx",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static, on-device real-time guitar effects pedalboard for the browser",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "for f in app.js presets.js settings.js audio/*.js ui/*.js; do node --check \"$f\" || exit 1; done"
+  }
+}
