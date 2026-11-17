@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2f4f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0f0e" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Checkup is a free, private health check for your iPhone. Test the display, touchscreen, speakers, microphone, cameras, sensors and more, right in Safari.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Checkup">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
+  <meta property="og:title" content="Checkup — iPhone health check">
+  <meta property="og:description" content="Test your iPhone’s screen, speakers, microphone, cameras and sensors in Safari. Nothing leaves your phone.">
+  <meta property="og:type" content="website">
+  <title>Checkup — iPhone health check</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css?v=1">
+  <script type="module" src="./app.js?v=1"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="masthead">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><rect x="1" y="1" width="30" height="30" rx="8.5"/><path d="M7 17h4.2l2.3-5.5 4 10 2.6-6.5H25"/></svg>
+        </span>
+        <span class="brand-name">Checkup</span>
+      </div>
+      <div class="masthead-actions">
+        <button id="shareButton" class="icon-button" type="button" aria-label="Share report">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M8 7.5l4-4 4 4"/><path d="M6.5 11H5.5v9h13v-9h-1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="heroTitle">
+        <h1 id="heroTitle">iPhone health check</h1>
+        <p class="hero-sub">Test your screen, sound, cameras and sensors in a few minutes. Everything runs on your phone, and nothing is uploaded.</p>
+      </section>
+
+      <div id="notices" class="notices" hidden></div>
+
+      <section id="summary" class="card summary" aria-live="polite" aria-label="Overall result">
+        <div class="summary-top">
+          <div class="ring ring-loading" aria-hidden="true"></div>
+          <div class="summary-text">
+            <p class="summary-headline">Loading…</p>
+            <p class="summary-message">If this doesn’t change, open the page in Safari.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="hardwareTitle">
+        <div class="group-head">
+          <h2 id="hardwareTitle">Hardware tests</h2>
+          <p>Run these right here. Most take under a minute.</p>
+        </div>
+        <ul id="hardwareList" class="test-list card"></ul>
+      </section>
+
+      <section class="group" aria-labelledby="settingsTitle">
+        <div class="group-head">
+          <h2 id="settingsTitle">Check on your iPhone</h2>
+          <p>Things a web page can’t measure. Each one shows you where to look.</p>
+        </div>
+        <ul id="settingsList" class="test-list card"></ul>
+      </section>
+
+      <section id="deviceCard" class="card device-card" aria-label="This device"></section>
+
+      <section class="card about" aria-labelledby="aboutTitle">
+        <div class="card-head">
+          <span class="tile tile-small" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg></span>
+          <h2 id="aboutTitle">Private by design</h2>
+        </div>
+        <p>Camera, microphone, motion and location are used only while a test is open, and only after you allow them. Results are saved in this browser alone. Checkup has no accounts, tracking or servers.</p>
+        <p>A web page can’t see everything. Checkup helps you spot problems; for a full diagnosis, Apple Support or an Apple Authorised Service Provider can run Apple’s own diagnostics.</p>
+        <button id="resetButton" class="text-button danger" type="button">Clear all results</button>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Checkup isn’t made by or affiliated with Apple. iPhone is a trademark of Apple Inc.</p>
+    </footer>
+  </div>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <section id="sheetPanel" class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <header class="sheet-head">
+        <div class="sheet-grabber" aria-hidden="true"></div>
+        <div class="sheet-titles">
+          <p id="sheetEyebrow" class="sheet-eyebrow"></p>
+          <h2 id="sheetTitle" class="sheet-title"></h2>
+        </div>
+        <button id="sheetClose" class="icon-button sheet-close" type="button" aria-label="Close" data-close>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
+        </button>
+      </header>
+      <div id="sheetBody" class="sheet-body"></div>
+      <footer id="sheetFooter" class="sheet-footer"></footer>
+    </section>
+  </div>
+
+  <div id="immersive" class="immersive" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <noscript><p class="noscript">Checkup needs JavaScript. Turn it on in Settings › Apps › Safari › Advanced.</p></noscript>
+</body>
+</html>
