@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 4 demo — The chase camera</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 4</h2>
+    <label><input type="checkbox" id="relative" checked /> Camera-relative controls</label>
+    <label><input type="checkbox" id="smooth" checked /> Smooth follow</label>
+    <label>Distance <input type="range" id="dist" min="3" max="14" step="0.5" value="7" /></label>
+  </div>
+  <div class="hint">
+    <span class="keys">WASD to move · drag the mouse to turn the camera</span>
+    <span class="touch">Left thumb: move · right thumb: drag to look</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, ground, makeBot, box, angleDelta, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+
+    const stage = createStage();
+    const { scene, camera, sun } = stage;
+    ground(scene, 60);
+
+    // A little forest of pillars and trees for reference.
+    const rand = (a, b) => a + Math.random() * (b - a);
+    for (let i = 0; i < 40; i++) {
+      const x = rand(-26, 26);
+      const z = rand(-26, 26);
+      if (Math.hypot(x, z) < 4) continue;
+      if (i % 3 === 0) {
+        const h = rand(1, 3.5);
+        scene.add(box(1.2, h, 1.2, '#f4f1ea', { x, z, y: h / 2 }));
+      } else {
+        const tree = new THREE.Mesh(
+          new THREE.ConeGeometry(rand(0.6, 1.1), rand(1.8, 3), 7),
+          new THREE.MeshStandardMaterial({ color: '#3f9a5a', flatShading: true }),
+        );
+        tree.position.set(x, 1.2, z);
+        tree.castShadow = true;
+        scene.add(tree);
+      }
+    }
+
+    // #region setup
+    const bot = makeBot();
+    scene.add(bot);
+    const input = new Input({ jumpButton: false });
+
+    const chase = new ChaseCamera(camera, { distance: 7, pitch: 0.45 });
+    // #endregion
+
+    const velocity = new THREE.Vector3();
+    let facing = 0;
+    const ui = {
+      relative: document.getElementById('relative'),
+      smooth: document.getElementById('smooth'),
+      dist: document.getElementById('dist'),
+    };
+
+    stage.start((dt) => {
+      // #region frame
+      // #region movement
+      const move = input.getMove();
+
+      // Camera-relative: "forward" means "away from the camera", whichever way it faces.
+      const wish = ui.relative.checked
+        ? chase.toWorld(move)
+        : new THREE.Vector3(move.x, 0, -move.y); // world axes, like Lesson 3
+      wish.multiplyScalar(6);
+
+      velocity.lerp(wish, damp(10, dt));
+      bot.position.addScaledVector(velocity, dt);
+      if (wish.lengthSq() > 0.01) {
+        facing += angleDelta(facing, Math.atan2(wish.x, wish.z)) * damp(12, dt);
+      }
+      bot.rotation.y = facing;
+      // #endregion
+
+      // #region follow
+      // Read the panel, then follow the robot's new position.
+      chase.smoothing = ui.smooth.checked ? 9 : 0;
+      chase.distance = Number(ui.dist.value);
+
+      chase.update(dt, bot.position, input.consumeLook());
+      // #endregion
+      // #endregion
+
+      // Keep the sun's shadow box centred on the player so shadows never run out.
+      sun.position.set(bot.position.x + 8, 14, bot.position.z + 6);
+      sun.target.position.copy(bot.position);
+    });
+  </script>
+</body>
+</html>

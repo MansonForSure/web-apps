@@ -1,0 +1,44 @@
+/* demo.css — shared look for the little lesson demos */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1a22; }
+body { font: 500 13px/1.35 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #1b1a22; }
+canvas { display: block; outline: none; }
+
+.panel {
+  position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left));
+  z-index: 6; display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; border-radius: 10px; max-width: min(260px, calc(100vw - 40px));
+  background: rgba(244, 241, 234, 0.92); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.panel h2 { margin: 0 0 2px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #ff5b2e; }
+.panel label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.panel input[type="checkbox"] { accent-color: #ff5b2e; width: 16px; height: 16px; margin: 0; }
+.panel input[type="range"] { accent-color: #ff5b2e; width: 100%; }
+.panel .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.panel button {
+  font: inherit; font-weight: 700; padding: 6px 10px; border-radius: 7px; cursor: pointer;
+  border: 1.5px solid #1b1a22; background: #fff; color: #1b1a22;
+}
+.panel button.on { background: #1b1a22; color: #f4f1ea; }
+.panel .stat { font: 600 12px/1.4 ui-monospace, "JetBrains Mono", monospace; color: #44434d; }
+.panel .stat b { color: #1b1a22; }
+
+.hint {
+  position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 4; padding: 7px 12px; border-radius: 999px; white-space: nowrap;
+  background: rgba(27, 26, 34, 0.78); color: #f4f1ea; font-weight: 600; pointer-events: none;
+}
+body.touch .hint .keys { display: none; }
+body:not(.touch) .hint .touch { display: none; }
+
+.toast {
+  position: fixed; left: 50%; top: 22%; transform: translate(-50%, -50%) scale(0.9);
+  z-index: 7; padding: 10px 18px; border-radius: 12px; background: #1b1a22; color: #f4f1ea;
+  font-weight: 800; font-size: 18px; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+@media (max-width: 520px) {
+  .panel { padding: 8px 10px; font-size: 12px; }
+  .hint { font-size: 12px; }
+}

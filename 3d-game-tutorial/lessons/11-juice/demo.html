@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 11 demo — Juice: making it feel good</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../../assets/vendor/three/three.module.js",
+        "three/addons/": "../../assets/vendor/three/addons/"
+      }
+    }
+  </script>
+  <style>
+    .effects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+    .panel { max-width: 300px; }
+    .panel .subtitle { margin: 0 0 2px; font-weight: 700; }
+    .panel .motion { border-top: 1px solid #ccc6ba; padding-top: 7px; }
+    .panel .status { font-size: 11px; color: #575460; }
+    .score { position: fixed; top: 12px; right: 12px; z-index: 4; padding: 9px 13px;
+      background: #1b1a22; color: #f4f1ea; border-radius: 10px; font-weight: 700; }
+    .score b { color: #2fd9ff; font-size: 21px; }
+    .toast { top: auto; bottom: 21%; font-size: 15px; white-space: nowrap; }
+    @media (max-width: 520px) {
+      .panel { max-width: 280px; gap: 7px; }
+      .effects { gap: 10px 14px; }
+      .effects label { min-height: 24px; }
+      .score { top: auto; bottom: 135px; right: 18px; padding: 7px 10px; font-size: 11px; }
+      .score b { font-size: 17px; }
+      .hint { left: 12px; transform: none; max-width: calc(100vw - 160px);
+        white-space: normal; text-align: center; }
+      .toast { bottom: 27%; }
+    }
+    @media (max-height: 560px) {
+      .panel { font-size: 11px; padding: 7px 9px; gap: 4px; }
+      .panel .subtitle, .panel .status { display: none; }
+      .effects { gap: 4px 10px; }
+      .effects label { min-height: 20px; }
+      .panel button { padding: 4px 8px; }
+      .panel .motion { padding-top: 4px; }
+      .panel .stat { font-size: 10px; }
+      .score { font-size: 10px; padding: 5px 8px; }
+      .toast { bottom: 25%; font-size: 11px; padding: 6px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 11</h2>
+    <p class="subtitle">Same game. Different feel.</p>
+    <div class="effects">
+      <label><input type="checkbox" id="shake" checked /> Screen shake</label>
+      <label><input type="checkbox" id="squash" checked /> Squash &amp; stretch</label>
+      <label><input type="checkbox" id="particles" checked /> Particles</label>
+      <label><input type="checkbox" id="hitstop" checked /> Hit-stop</label>
+      <label><input type="checkbox" id="fov" checked /> FOV kick</label>
+      <label><input type="checkbox" id="sound" checked /> Sound</label>
+    </div>
+    <div class="row"><button id="all" type="button">Juice all</button><button id="none" type="button">Juice none</button></div>
+    <label class="motion"><input type="checkbox" id="reduce" /> Reduce motion</label>
+    <span class="status" id="motionStatus">Each switch changes feedback, not the rules.</span>
+    <span class="stat">trauma <b id="trauma">0.00</b> · particles <b id="alive">0</b> / 80<br />bumps <b id="bumps">0</b> · audio <b id="audio">tap / key to start</b></span>
+  </div>
+  <div class="score">CORES <b id="collected">0</b> · combo <span id="combo">0</span></div>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="hint"><span class="keys">WASD move · Space jump · drag to look · try the orange bumper</span><span class="touch">Left thumb move · JUMP · right thumb look</span></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, makeBot, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh } from '../kit/physics.js';
+
+    const ui = Object.fromEntries(['shake', 'squash', 'particles', 'hitstop', 'fov', 'sound',
+      'reduce', 'all', 'none', 'motionStatus', 'trauma', 'alive', 'bumps', 'audio',
+      'collected', 'combo', 'toast'].map(id => [id, document.getElementById(id)]));
+    const stage = createStage();
+    const { scene, camera, sun } = stage;
+    const floor = box(14, 0.65, 12, '#9fd08a', { y: -0.325 });
+    scene.add(floor);
+    const colliders = [colliderFromMesh(floor)];
+    // The physics floor stays a box. Only its underside is decorative.
+    const stone = box(13.4, 0.8, 11.4, '#ad8a69', { y: -1.05 });
+    scene.add(stone);
+    const underside = new THREE.Mesh(new THREE.ConeGeometry(7.5, 3.3, 4),
+      new THREE.MeshStandardMaterial({ color: '#937354', flatShading: true }));
+    underside.rotation.set(Math.PI, Math.PI / 4, 0);
+    underside.position.y = -3.05;
+    scene.add(underside);
+    // Quiet landmarks help you judge camera movement without cluttering the arena.
+    for (const [x, z] of [[-5.5, -4.5], [5.5, -4.5], [-5.5, 4.5], [5.5, 4.5]]) {
+      scene.add(box(0.2, 1.1, 0.2, '#866343', { x, y: 0.55, z }));
+      const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0),
+        new THREE.MeshStandardMaterial({ color: '#479f65', flatShading: true }));
+      crown.position.set(x, 1.35, z);
+      crown.castShadow = true;
+      scene.add(crown);
+    }
+    const border = new THREE.LineSegments(new THREE.EdgesGeometry(floor.geometry),
+      new THREE.LineBasicMaterial({ color: '#679758', transparent: true, opacity: 0.5 }));
+    border.position.copy(floor.position);
+    scene.add(border);
+
+    const bot = makeBot('#ff5b2e');
+    scene.add(bot);
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 10, pitch: 0.55 });
+    const player = new PlayerController();
+    player.position.set(0, 0, 3.8);
+    player.grounded = true;
+    player.ground = colliders[0];
+    bot.position.copy(player.position);
+    chase.update(0, player.position);
+    let total = 0, combo = 0, comboTimer = 0, worldTime = 0;
+    let trauma = 0, squash = 1, fovKick = 0, freezeUntil = 0;
+    let bumperCooldown = 0, stun = 0, bumperSpring = 1, bumps = 0;
+    let toastUntil = 0, stride = 0;
+    const effectIds = ['shake', 'squash', 'particles', 'hitstop', 'fov', 'sound'];
+    const motionIds = ['shake', 'squash', 'particles', 'fov'];
+    const enabled = name => ui[name].checked && !(ui.reduce.checked && motionIds.includes(name));
+    function message(text) {
+      ui.toast.textContent = text;
+      ui.toast.classList.add('show');
+      toastUntil = performance.now() + 1100;
+    }
+
+    // #region motion
+    const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+    ui.reduce.checked = motionPreference.matches;
+    function showMotionStatus() {
+      ui.motionStatus.textContent = ui.reduce.checked
+        ? 'Motion effects paused; sound and hit-stop still work.'
+        : 'Each switch changes feedback, not the rules.';
+    }
+    motionPreference.addEventListener('change', event => {
+      ui.reduce.checked = event.matches;
+      showMotionStatus();
+    });
+    ui.reduce.addEventListener('change', showMotionStatus);
+    showMotionStatus();
+    // #endregion
+    function setJuice(value) {
+      for (const name of effectIds) ui[name].checked = value;
+      if (!value) { trauma = 0; squash = 1; fovKick = 0; freezeUntil = 0; }
+      syncSound();
+    }
+    ui.all.addEventListener('click', () => setJuice(true));
+    ui.none.addEventListener('click', () => setJuice(false));
+
+    // #region audio-unlock
+    let audioContext = null, master = null;
+    function unlockSound() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) { ui.audio.textContent = 'unavailable'; return; }
+      if (!audioContext) {
+        audioContext = new AudioCtx();
+        master = audioContext.createGain();
+        master.gain.value = ui.sound.checked ? 0.3 : 0;
+        master.connect(audioContext.destination);
+        audioContext.addEventListener('statechange', syncSound);
+      }
+      if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+      syncSound();
+    }
+    window.addEventListener('pointerdown', unlockSound);
+    window.addEventListener('keydown', unlockSound);
+    function syncSound() {
+      if (master) master.gain.setTargetAtTime(ui.sound.checked ? 0.3 : 0, audioContext.currentTime, 0.015);
+      ui.audio.textContent = !ui.sound.checked ? 'muted' : !audioContext ? 'tap / key to start'
+        : audioContext.state === 'running' ? 'ready' : 'tap / key to resume';
+    }
+    ui.sound.addEventListener('change', syncSound);
+    // #endregion
+    // #region sound
+    function tone(freq, to, duration = 0.12, volume = 0.12, type = 'sine') {
+      if (!enabled('sound') || audioContext?.state !== 'running') return;
+      const t = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(to, t + duration);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(volume, t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+      osc.connect(gain).connect(master);
+      osc.start(t);
+      osc.stop(t + duration + 0.02);
+      osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+    }
+    // #endregion
+
+    // #region particle-pool
+    const particleGeometry = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+    const particleMaterial = new THREE.MeshBasicMaterial({ color: '#2fd9ff' });
+    const pool = Array.from({ length: 80 }, () => {
+      const mesh = new THREE.Mesh(particleGeometry, particleMaterial);
+      mesh.visible = false;
+      scene.add(mesh);
+      return { mesh, velocity: new THREE.Vector3(), life: 0 };
+    });
+    let nextParticle = 0;
+    // #endregion
+    // #region particles
+    function burst(origin, count = 12) {
+      if (!enabled('particles')) return;
+      for (let n = 0; n < count; n++) {
+        const p = pool[nextParticle];
+        nextParticle = (nextParticle + 1) % pool.length;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 2;
+        p.mesh.position.copy(origin);
+        p.mesh.position.y += 0.1;
+        p.velocity.set(Math.cos(angle) * speed, 2 + Math.random() * 2, Math.sin(angle) * speed);
+        p.life = 0.45 + Math.random() * 0.2;
+        p.mesh.scale.setScalar(1);
+        p.mesh.visible = true;
+      }
+    }
+    function updateParticles(dt) {
+      for (const p of pool) {
+        if (!enabled('particles')) p.life = 0;
+        if (p.life <= 0) { p.mesh.visible = false; continue; }
+        p.life -= dt;
+        p.velocity.y -= 9 * dt;
+        p.mesh.position.addScaledVector(p.velocity, dt);
+        p.mesh.scale.setScalar(Math.max(0, Math.min(1, p.life / 0.2)));
+        p.mesh.visible = p.life > 0;
+      }
+    }
+    // #endregion
+
+    // Eight cores share their geometry and material, just as in Lesson 7.
+    const coreGeometry = new THREE.OctahedronGeometry(0.32);
+    const coreMaterial = new THREE.MeshStandardMaterial({ color: '#2fd9ff',
+      emissive: '#2fd9ff', emissiveIntensity: 0.8, roughness: 0.3, flatShading: true });
+    const ringGeometry = new THREE.TorusGeometry(0.45, 0.035, 4, 20);
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: '#2fd9ff' });
+    const coreSpots = [[0, 2], [0, 0.4], [-2.7, 1.6], [-3.8, -1.5],
+      [-2.3, -3.5], [2.3, -3.5], [3.8, -1.5], [2.7, 1.6]];
+    const cores = coreSpots.map(([x, z], index) => {
+      const mesh = new THREE.Mesh(coreGeometry, coreMaterial);
+      mesh.position.set(x, 1.05, z);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(x, 0.04, z);
+      scene.add(ring);
+      return { mesh, ring, index, respawn: 0 };
+    });
+    // #region collect
+    function collect(core) {
+      core.respawn = 4; // seconds of simulation time
+      core.mesh.visible = core.ring.visible = false;
+      total++;
+      combo = comboTimer > 0 ? Math.min(combo + 1, 8) : 1;
+      comboTimer = 1.5;
+      if (enabled('shake')) trauma = Math.min(1, trauma + 0.12);
+      burst(core.mesh.position, 12);
+      const pitch = 440 * 2 ** ((combo - 1) / 12);
+      tone(pitch, pitch * 1.5, 0.13, 0.16, 'triangle');
+      message(combo > 1 ? `Core +1 · combo ${combo}` : 'Core +1');
+    }
+    // #endregion
+    function updateCores(dt) {
+      for (const core of cores) {
+        if (core.respawn > 0) {
+          core.respawn = Math.max(0, core.respawn - dt);
+          core.mesh.visible = core.ring.visible = core.respawn === 0;
+          continue;
+        }
+        core.mesh.rotation.y = ui.reduce.checked ? 0 : worldTime * 1.5 + core.index;
+        core.mesh.position.y = 1.05 + (ui.reduce.checked ? 0 : Math.sin(worldTime * 2 + core.index) * 0.12);
+        const dx = player.position.x - core.mesh.position.x;
+        const dy = player.position.y + 0.8 - core.mesh.position.y;
+        const dz = player.position.z - core.mesh.position.z;
+        if (dx * dx + dy * dy + dz * dz < 0.9 * 0.9) collect(core);
+      }
+    }
+
+    // The orange post is a gameplay trigger, not an AABB wall.
+    const bumper = new THREE.Group();
+    bumper.position.set(0, 0, -1.8);
+    scene.add(bumper);
+    const bumperMaterial = new THREE.MeshStandardMaterial({ color: '#ff5b2e', roughness: 0.5, flatShading: true });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.65, 1.7, 12), bumperMaterial);
+    post.position.y = 0.85;
+    post.castShadow = true;
+    bumper.add(post);
+    const bumperRing = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.15, 6, 18),
+      new THREE.MeshStandardMaterial({ color: '#fff1b5', roughness: 0.6 }));
+    bumperRing.rotation.x = Math.PI / 2;
+    bumperRing.position.y = 1.15;
+    bumper.add(bumperRing);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.53, 0.53, 0.12, 12),
+      new THREE.MeshStandardMaterial({ color: '#1b1a22' }));
+    cap.position.y = 1.75;
+    bumper.add(cap);
+    const bumperBase = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.08, 16),
+      new THREE.MeshStandardMaterial({ color: '#f4f1ea' }));
+    bumperBase.position.set(0, 0.04, -1.8);
+    bumperBase.receiveShadow = true;
+    scene.add(bumperBase);
+
+    // #region bumper
+    function hitBumper() {
+      const away = new THREE.Vector3(player.position.x - bumper.position.x, 0,
+        player.position.z - bumper.position.z);
+      if (away.lengthSq() < 0.0001) away.set(0, 0, 1);
+      away.normalize();
+      player.position.x = bumper.position.x + away.x * 1.1;
+      player.position.z = bumper.position.z + away.z * 1.1;
+      player.velocity.set(away.x * 11, 5.5, away.z * 11);
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = Infinity;
+      player.bufferTimer = 0;
+      stun = 0.22;
+      bumperCooldown = 0.65;
+      bumps++;
+      if (enabled('shake')) trauma = Math.min(1, trauma + 0.55);
+      if (enabled('fov')) fovKick = 5;
+      if (enabled('hitstop')) freezeUntil = performance.now() + 80;
+      if (enabled('squash')) bumperSpring = 0.65;
+      tone(180, 60, 0.16, 0.18, 'triangle');
+      message('Boing · same knockback with juice off');
+    }
+    // #endregion
+    // #region events
+    player.onJump = () => {
+      if (enabled('squash')) squash = 1.25;
+      if (enabled('fov')) fovKick = Math.max(fovKick, 3);
+      tone(260, 560, 0.12, 0.09, 'square');
+    };
+    player.onLand = speed => {
+      if (speed < 2) return; // ignore settling onto the floor
+      if (enabled('squash')) squash = 1 - Math.min(speed / 34, 0.28);
+      if (enabled('shake')) trauma = Math.min(1, trauma + Math.min(speed / 60, 0.18));
+      burst(player.position, 8);
+      tone(120, 55, 0.09, 0.08);
+    };
+    // #endregion
+    // #region squash
+    function animateBot(dt) {
+      if (!enabled('squash')) squash = 1;
+      else squash += (1 - squash) * damp(12, dt);
+      const width = 1 / Math.sqrt(squash);
+      bot.scale.set(width, squash, width);
+      bot.position.copy(player.position);
+      bot.rotation.y = player.facing;
+    }
+    // #endregion
+    // #region shake
+    function shakeCamera(dt) {
+      if (!enabled('shake')) { trauma = 0; return; }
+      const strength = trauma * trauma;
+      const randomSigned = () => Math.random() * 2 - 1;
+      camera.translateX(randomSigned() * 0.25 * strength);
+      camera.translateY(randomSigned() * 0.18 * strength);
+      camera.rotateZ(randomSigned() * 0.025 * strength);
+      trauma = Math.max(0, trauma - 1.7 * dt);
+    }
+    // #endregion
+    const BASE_FOV = 55;
+    // #region fov
+    function updateFov(dt) {
+      if (!enabled('fov')) fovKick = 0;
+      camera.fov = BASE_FOV + fovKick;
+      camera.updateProjectionMatrix();
+      fovKick += (0 - fovKick) * damp(14, dt);
+    }
+    // #endregion
+    // #region hitstop
+    stage.start(dt => {
+      // The real-time deadline expires even while simulation time is frozen.
+      const now = performance.now();
+      if (!enabled('hitstop')) freezeUntil = 0;
+      const simDt = now < freezeUntil ? 0 : dt;
+      if (simDt > 0) simulate(simDt);
+      animateBot(simDt);
+      updateParticles(simDt);
+      chase.update(dt, player.position, input.consumeLook()); // rebuild the clean camera pose
+      if (innerHeight <= 560) camera.translateY(0.9); // leave room below the compact panel
+      shakeCamera(dt); // perturb that pose, never the controller or chase target
+      updateFov(dt);
+      updateReadouts(now);
+    });
+    // #endregion
+    function simulate(dt) {
+      worldTime += dt;
+      comboTimer = Math.max(0, comboTimer - dt);
+      if (comboTimer === 0) combo = 0;
+      bumperCooldown = Math.max(0, bumperCooldown - dt);
+      stun = Math.max(0, stun - dt);
+      // Briefly soften steering so the controller does not erase the knockback.
+      player.accel = stun > 0 ? 0.8 : 14;
+      player.airAccel = stun > 0 ? 0.8 : 6;
+      player.update(dt, input, chase, colliders);
+      const distance = Math.hypot(player.position.x - bumper.position.x, player.position.z - bumper.position.z);
+      if (bumperCooldown === 0 && distance < 1.05 && player.position.y < 1.9 && player.position.y > -0.2) hitBumper();
+      updateCores(dt);
+      if (player.position.y < -9) {
+        player.position.set(0, 0, 3.8);
+        player.velocity.set(0, 0, 0);
+        player.ground = null;
+        player.grounded = false;
+        player.airTime = 0;
+        player.bufferTimer = 0;
+        chase.snapped = false;
+        message('Back on the island');
+      }
+      bumperSpring += (1 - bumperSpring) * damp(12, dt);
+      const spring = enabled('squash') ? bumperSpring : 1;
+      bumper.scale.set(1 / Math.sqrt(spring), spring, 1 / Math.sqrt(spring));
+      stride += player.horizontalSpeed * dt * 3;
+      const swing = ui.reduce.checked || !player.grounded ? 0 : Math.min(player.horizontalSpeed / 6.5, 1) * 0.12;
+      bot.userData.legs[0].position.z = Math.sin(stride) * swing;
+      bot.userData.legs[1].position.z = -Math.sin(stride) * swing;
+    }
+    function updateReadouts(now) {
+      ui.trauma.textContent = trauma.toFixed(2);
+      let alive = 0;
+      for (const p of pool) if (p.life > 0) alive++;
+      ui.alive.textContent = alive;
+      ui.bumps.textContent = bumps;
+      ui.collected.textContent = total;
+      ui.combo.textContent = combo;
+      if (now > toastUntil) ui.toast.classList.remove('show');
+      sun.position.set(player.position.x + 8, 14, player.position.z + 6);
+      sun.target.position.copy(player.position);
+    }
+    // A small inspection surface for the lesson's automated browser checks.
+    window.juiceDemo = { player, cores, input, chase, camera, pool, ui,
+      get state() { return { total, combo, bumps, trauma, squash, fovKick,
+        frozen: performance.now() < freezeUntil, audio: audioContext?.state ?? 'locked' }; } };
+  </script>
+</body>
+</html>

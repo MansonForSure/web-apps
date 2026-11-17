@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#1b1a22" />
+  <meta name="description" content="Skyhop — a tiny browser 3D platformer built with Three.js. The final project of the Cube→Game tutorial." />
+  <title>Skyhop — a tiny 3D platformer</title>
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../assets/vendor/three/three.module.js",
+        "three/addons/": "../assets/vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="view" aria-label="Skyhop game view"></canvas>
+  <div id="flash" class="flash" aria-hidden="true"></div>
+
+  <!-- ===================================================== HUD -->
+  <header id="hud" class="hud" hidden>
+    <div class="hud-left">
+      <div class="tag"><span id="hud-level">Level 1</span><b id="hud-name">Meadow Hop</b></div>
+      <div id="hearts" class="hearts" aria-label="Hearts"></div>
+    </div>
+    <div class="hud-right">
+      <div class="chip cores" id="cores" aria-label="Energy cores">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 12 12 22 3 12Z" /></svg>
+        <span id="cores-text">0/0</span>
+      </div>
+      <div class="chip timer" id="timer" aria-label="Time">0:00.0</div>
+      <button class="icon-btn" data-action="mute" id="mute-btn" aria-label="Mute sound" aria-pressed="false">
+        <svg class="snd-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="stroke" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" /></svg>
+        <svg class="snd-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="stroke" d="m16 9 5 6m0-6-5 6" /></svg>
+      </button>
+      <button class="icon-btn" data-action="pause" aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Touch controls (shown only on touch screens) -->
+  <div id="stick" class="stick-base" aria-hidden="true"><div id="knob" class="stick-knob"></div></div>
+  <button id="jump-btn" class="jump-btn" aria-label="Jump">JUMP</button>
+
+  <!-- ===================================================== SCREENS -->
+  <section id="screen-loading" class="screen open">
+    <div class="card center">
+      <div class="logo">SKY<span>HOP</span></div>
+      <div class="bar"><i id="load-bar"></i></div>
+      <p class="mono" id="load-text">Waking up the robot… 0%</p>
+    </div>
+  </section>
+
+  <section id="screen-title" class="screen side">
+    <div class="card title-card">
+      <p class="eyebrow">Cube→Game · Final project</p>
+      <h1 class="logo">SKY<span>HOP</span></h1>
+      <p class="lead">Guide the little robot across floating islands. Collect every <b class="cyan">energy core</b> to open the portal.</p>
+      <button class="btn primary big" data-action="play" data-primary>Play</button>
+      <div class="levels" id="level-list"></div>
+      <div class="help">
+        <p class="keys-only"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <i>(hold = higher)</i><br /><kbd>Drag</kbd> look <kbd>Esc</kbd> pause <kbd>M</kbd> mute</p>
+        <p class="touch-only">Left thumb moves · right thumb looks · <b>JUMP</b> to jump (hold = higher)</p>
+      </div>
+      <a class="link" href="../index.html">← Back to the tutorial</a>
+    </div>
+  </section>
+
+  <section id="screen-pause" class="screen dim">
+    <div class="card center narrow">
+      <h2>Paused</h2>
+      <button class="btn primary" data-action="resume" data-primary>Resume</button>
+      <button class="btn" data-action="restart">Restart level</button>
+      <div class="setting">
+        <span class="mono">Graphics</span>
+        <div class="seg" id="quality-seg">
+          <button data-quality="auto">Auto</button>
+          <button data-quality="high">High</button>
+          <button data-quality="low">Low</button>
+        </div>
+      </div>
+      <p class="mono small" id="quality-info">Rendering: high</p>
+      <button class="btn" data-action="mute"><span class="mute-label">Sound: on</span></button>
+      <button class="btn ghost" data-action="title">Quit to title</button>
+    </div>
+  </section>
+
+  <section id="screen-complete" class="screen dim">
+    <div class="card center narrow">
+      <p class="eyebrow" id="complete-eyebrow">Level 1 complete</p>
+      <h2 id="complete-name">Meadow Hop</h2>
+      <div class="stats">
+        <div><span class="mono">Time</span><b id="complete-time">0:00.0</b></div>
+        <div><span class="mono">Best</span><b id="complete-best">0:00.0</b></div>
+        <div><span class="mono">Hearts</span><b id="complete-hearts">3</b></div>
+      </div>
+      <p class="badge" id="complete-record" hidden>New record!</p>
+      <button class="btn primary" data-action="next" data-primary>Next level →</button>
+      <button class="btn" data-action="restart">Play again</button>
+    </div>
+  </section>
+
+  <section id="screen-over" class="screen dim">
+    <div class="card center narrow">
+      <p class="eyebrow">Out of hearts</p>
+      <h2>Game over</h2>
+      <p class="lead">Tip: falling is −1 heart. Jump on a Spiker's head — never touch its spikes.</p>
+      <button class="btn primary" data-action="restart" data-primary>Try again</button>
+      <button class="btn ghost" data-action="title">Title screen</button>
+    </div>
+  </section>
+
+  <section id="screen-victory" class="screen dim">
+    <div class="card center narrow">
+      <p class="eyebrow">All islands cleared</p>
+      <h2>You did it!</h2>
+      <ol class="times" id="victory-times"></ol>
+      <p class="mono" id="victory-total"></p>
+      <button class="btn primary" data-action="title" data-primary>Back to title</button>
+      <a class="btn ghost" href="../index.html">Learn how it was made →</a>
+    </div>
+  </section>
+
+  <section id="screen-error" class="screen dim">
+    <div class="card center narrow">
+      <h2>Can't start 3D</h2>
+      <p class="lead" id="error-text">Your browser or device doesn't support WebGL 2, which Skyhop needs. Try an up-to-date Chrome, Safari, Edge or Firefox, and check that hardware acceleration is turned on.</p>
+      <a class="btn" href="../index.html">Back to the tutorial</a>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Skyhop needs JavaScript to run.</p></noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

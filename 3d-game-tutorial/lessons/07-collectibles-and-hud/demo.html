@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 7 demo — Collectibles and a HUD</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../../assets/vendor/three/three.module.js",
+        "three/addons/": "../../assets/vendor/three/addons/"
+      }
+    }
+  </script>
+  <style>
+    .panel { width: 156px; }
+    .hud { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%;
+      transform: translateX(-50%); z-index: 6; pointer-events: none;
+      display: flex; gap: 18px; align-items: center; padding: 10px 18px;
+      background: rgba(244,241,234,.95); border: 2px solid #1b1a22; border-radius: 14px;
+      box-shadow: 0 5px 0 rgba(27,26,34,.12); font-size: 16px; font-weight: 800; white-space: nowrap; }
+    .hud .gem { color: #087f99; }
+    .hud time { font-variant-numeric: tabular-nums; min-width: 5ch; }
+    .toast { top: 100px; }
+    .finish { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center;
+      background: rgba(27,26,34,.32); backdrop-filter: blur(3px); }
+    .finish[hidden] { display: none; }
+    .finish-card { width: min(300px, calc(100vw - 64px)); padding: 26px; border-radius: 20px;
+      background: #f4f1ea; border: 2px solid #1b1a22; box-shadow: 0 12px 0 rgba(27,26,34,.18); text-align: center; }
+    .finish-card h2 { font-size: 30px; line-height: 1.1; margin: 8px 0 22px; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 800; color: #087f99; }
+    .results { display: flex; justify-content: center; gap: 32px; margin: 18px 0; }
+    .results span { display: block; font-size: 12px; color: #555; }
+    .results b { font-size: 24px; font-variant-numeric: tabular-nums; }
+    .finish-card button { padding: 12px 24px; background: #ff5b2e; color: white; font: 800 16px system-ui;
+      border: 2px solid #1b1a22; border-radius: 10px; cursor: pointer; }
+    .finish-card button:focus-visible { outline: 3px solid #087f99; outline-offset: 4px; }
+    #record { min-height: 18px; font-weight: 700; }
+    @media (max-width: 640px) {
+      .panel { top: 80px; width: 132px; }
+      .hud { font-size: 14px; gap: 14px; padding: 9px 14px; }
+      .toast { top: 232px; font-size: 16px; }
+      body.touch .hint { bottom: 130px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 7</h2>
+    <label><input id="bob" type="checkbox" checked /> Spin &amp; bob</label>
+    <button id="restart" type="button">Restart run</button>
+    <div class="stat">Best <b id="best">—</b><br />Move to start the timer</div>
+  </div>
+  <header class="hud" aria-label="Run progress">
+    <span><span class="gem" aria-hidden="true">◆</span> Cores <b id="count">0 / 12</b></span>
+    <time id="time" aria-label="Elapsed time">0.0 s</time>
+  </header>
+  <div id="combo" class="toast" role="status" aria-live="polite"></div>
+  <div class="hint">
+    <span class="keys">WASD / arrows move · Space jump · drag to look · collect all 12 cores</span>
+    <span class="touch">Left thumb moves · JUMP · right thumb looks</span>
+  </div>
+  <section id="finish" class="finish" hidden role="dialog" aria-modal="true" aria-labelledby="finish-title">
+    <div class="finish-card">
+      <div class="eyebrow">12 / 12 energy cores</div>
+      <h2 id="finish-title">Meadow cleared</h2>
+      <div class="results">
+        <div><span>Your time</span><b id="result-time">—</b></div>
+        <div><span>Best time</span><b id="result-best">—</b></div>
+      </div>
+      <p id="record"></p>
+      <button id="again" type="button">Play again</button>
+    </div>
+  </section>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, makeBot, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh } from '../kit/physics.js';
+
+    const stage = createStage({ fog: [24, 65] });
+    const { scene, camera, sun } = stage;
+    const colliders = [];
+    function platform(w, h, d, x, top, z, colour) {
+      const mesh = box(w, h, d, colour, { x, y: top - h / 2, z });
+      scene.add(mesh);
+      colliders.push(colliderFromMesh(mesh));
+    }
+    platform(22, 1, 24, 0, 0, -2, '#9fd08a');
+    platform(3.2, 0.65, 3.2, 4, 0.65, -2, '#f4f1ea');
+    platform(3.2, 1.1, 3.2, -4, 1.1, -5, '#f4f1ea');
+    platform(3.2, 1.4, 3.2, 4, 1.4, -8, '#ff5b2e');
+    // A few trees frame the playing area. They are decoration, not obstacles.
+    for (const [x, z] of [[-9,-11], [9,-11], [-9,6], [9,4], [-9,-2]]) {
+      scene.add(box(0.32, 1.3, 0.32, '#8c6044', { x, y: 0.65, z }));
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.8, 7),
+        new THREE.MeshStandardMaterial({ color: '#398956', flatShading: true }));
+      crown.position.set(x, 2.4, z);
+      crown.castShadow = true;
+      scene.add(crown);
+    }
+    const bot = makeBot('#ff5b2e');
+    scene.add(bot);
+    const player = new PlayerController();
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 10, pitch: 0.58, yaw: 0.12 });
+    let squash = 1;
+    let stride = 0;
+    player.onJump = () => { squash = 1.25; };
+    player.onLand = (speed) => { squash = 1 - Math.min(speed / 35, 0.3); };
+
+    // A generated radial texture is local, tiny, and reused by every halo.
+    const haloCanvas = document.createElement('canvas');
+    haloCanvas.width = haloCanvas.height = 64;
+    const context = haloCanvas.getContext('2d');
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255,255,255,.9)');
+    gradient.addColorStop(0.3, 'rgba(255,255,255,.35)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+    const haloTexture = new THREE.CanvasTexture(haloCanvas);
+    haloTexture.colorSpace = THREE.SRGBColorSpace;
+    const coreGeometry = new THREE.OctahedronGeometry(0.34);
+    const coreTemplate = new THREE.MeshStandardMaterial({
+      color: '#c9fbff', emissive: '#2fd9ff', emissiveIntensity: 2.4,
+      roughness: 0.3, flatShading: true, transparent: true,
+    });
+    const placements = [
+      [-1,0.9,3.8], [-1,0.9,1.5], [-1,0.9,-0.8],
+      [2.6,1.55,-2], [4.5,1.55,-2], [1,0.9,-4.4],
+      [-3,2,-5], [-4.7,2,-5], [-1.4,0.9,-7.6],
+      [3.1,2.3,-8], [4.8,2.3,-8], [0,0.9,-11],
+    ];
+    const TOTAL = placements.length;
+    const cores = [];
+    // #region cores
+    function makeCore(x, y, z, index) {
+      const group = new THREE.Group();
+      // Clone the material: fading one core must not fade all twelve.
+      const mesh = new THREE.Mesh(coreGeometry, coreTemplate.clone());
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTexture, color: '#2fd9ff', opacity: 0.7,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      halo.scale.setScalar(1.5);
+      group.add(mesh, halo);
+      group.position.set(x, y, z);
+      scene.add(group);
+      return { group, mesh, halo, homeY: y, phase: index * 0.7,
+        collected: false, fade: 0 };
+    }
+    // #endregion
+    // #region update
+    function updateCore(core, dt, time) {
+      if (!core.collected) {
+        if (ui.bob.checked) {
+          core.group.position.y = core.homeY + Math.sin(time * 2.2 + core.phase) * 0.15;
+          core.mesh.rotation.y = time * 1.8 + core.phase;
+        }
+        return;
+      }
+      // A collected core stays visible for a 0.35-second farewell.
+      core.fade = Math.min(1, core.fade + dt / 0.35);
+      const pop = 1 + Math.sin(core.fade * Math.PI) * 0.65;
+      core.mesh.scale.setScalar(pop);
+      core.mesh.material.opacity = 1 - core.fade;
+      core.halo.scale.setScalar(1.5 * pop);
+      core.halo.material.opacity = 0.7 * (1 - core.fade);
+      core.group.position.y += dt * 1.6;
+    }
+    // #endregion
+    const ui = Object.fromEntries(['bob', 'count', 'time', 'combo', 'best', 'finish',
+      'result-time', 'result-best', 'record', 'again', 'restart'].map((id) => [id, document.getElementById(id)]));
+    let collected = 0;
+    let started = false;
+    let finished = false;
+    let runTime = 0;
+    let lastElapsed = 0;
+    let lastCollectTime = -Infinity;
+    let combo = 0;
+    let comboUntil = 0;
+    const centre = new THREE.Vector3();
+    const COLLECT_RADIUS = 0.95;
+    const COMBO_WINDOW = 1.5;
+    const formatTime = (seconds) => `${seconds.toFixed(1)} s`;
+    // #region hud
+    const lastHud = { count: '', time: '', combo: '' };
+    function updateHud() {
+      const values = {
+        count: `${collected} / ${TOTAL}`,
+        time: formatTime(runTime),
+        combo: combo > 1 && runTime < comboUntil ? `Combo ×${combo}` : '',
+      };
+      for (const key of Object.keys(values)) {
+        if (values[key] !== lastHud[key]) {
+          ui[key].textContent = values[key];
+          lastHud[key] = values[key];
+          if (key === 'combo') ui.combo.classList.toggle('show', values[key] !== '');
+        }
+      }
+    }
+    // #endregion
+    // #region save
+    const SAVE_KEY = 'cube-game.lesson07.best.v1';
+    function loadBest() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        const value = raw === null ? NaN : Number(raw);
+        return Number.isFinite(value) && value > 0 ? value : null;
+      } catch {
+        return null;
+      }
+    }
+    let best = loadBest();
+    function saveBest() {
+      if (best !== null && runTime >= best) return false;
+      best = runTime; // Keep the record for this session even if saving fails.
+      try {
+        localStorage.setItem(SAVE_KEY, String(best));
+      } catch {
+        // Storage blocked or full: collecting still works.
+      }
+      return true;
+    }
+    // #endregion
+    // #region award
+    function collectCore(core) {
+      core.collected = true; // Mark immediately; the next frame cannot score it again.
+      collected += 1;
+      combo = runTime - lastCollectTime <= COMBO_WINDOW ? combo + 1 : 1;
+      lastCollectTime = runTime;
+      comboUntil = runTime + 1;
+      if (collected === TOTAL) finishRun();
+    }
+    // #endregion
+    // #region collect
+    function updateCores(dt, time) {
+      centre.copy(player.position).y += player.height / 2;
+      // Walk backwards so removing index i cannot skip an unvisited core.
+      for (let i = cores.length - 1; i >= 0; i--) {
+        const core = cores[i];
+        updateCore(core, dt, time);
+        if (started && !finished && !core.collected &&
+            core.group.position.distanceToSquared(centre) < COLLECT_RADIUS * COLLECT_RADIUS) {
+          collectCore(core);
+        }
+        if (core.collected && core.fade >= 1) {
+          scene.remove(core.group);
+          core.mesh.material.dispose();
+          core.halo.material.dispose();
+          cores.splice(i, 1);
+        }
+      }
+    }
+    // #endregion
+    // #region finish
+    function finishRun() {
+      finished = true;
+      comboUntil = 0; // Don't leave a frozen combo toast behind the finish card.
+      const record = saveBest();
+      ui['result-time'].textContent = formatTime(runTime);
+      ui['result-best'].textContent = formatTime(best);
+      ui.best.textContent = formatTime(best);
+      ui.record.textContent = record ? 'New personal best' : 'Try a shorter route next time';
+      // Let the last core finish its pop before revealing the card.
+    }
+    // #endregion
+    function disposeCore(core) {
+      scene.remove(core.group);
+      core.mesh.material.dispose();
+      core.halo.material.dispose();
+    }
+    // #region reset
+    function resetRun() {
+      cores.forEach(disposeCore);
+      cores.length = 0;
+      placements.forEach(([x, y, z], index) => cores.push(makeCore(x, y, z, index)));
+      collected = combo = runTime = comboUntil = 0;
+      lastCollectTime = -Infinity;
+      started = finished = false;
+      ui.finish.hidden = true;
+      ui.restart.disabled = false;
+      ui.bob.disabled = false;
+      ui.best.textContent = best === null ? '—' : formatTime(best);
+      player.position.set(0, 0, 6);
+      player.velocity.set(0, 0, 0);
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = player.bufferTimer = 0;
+      player.facing = Math.PI;
+      input.keys.clear();
+      input.stick.x = input.stick.y = 0;
+      input.jumpQueued = input.jumpHeld = false;
+      input.consumeLook();
+      chase.yaw = 0.12;
+      chase.pitch = 0.58;
+      chase.snapped = false;
+      squash = 1;
+      updateHud();
+      document.activeElement?.blur();
+    }
+    // #endregion
+    ui.restart.addEventListener('click', resetRun);
+    ui.again.addEventListener('click', resetRun);
+    // Keep Tab inside the finish dialog while it is open.
+    ui.finish.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab') { event.preventDefault(); ui.again.focus(); }
+    });
+    resetRun();
+    // #region frame
+    stage.start((dt, elapsed) => {
+      const realDelta = elapsed - lastElapsed;
+      lastElapsed = elapsed;
+      if (!finished) {
+        const move = input.getMove();
+        if (!started && (Math.hypot(move.x, move.y) > 0 || input.jumpQueued)) started = true;
+        if (started) runTime += realDelta;
+        player.update(dt, input, chase, colliders);
+        if (player.position.y < -10) {
+          player.position.set(0, 0, 6);
+          player.velocity.set(0, 0, 0);
+          chase.snapped = false; // Keep collected cores and the running timer.
+        }
+      } else {
+        input.consumeJump();
+      }
+      updateCores(dt, elapsed); // Pops continue even after the timer stops.
+      updateHud();
+      if (finished && cores.length === 0 && ui.finish.hidden) {
+        ui.finish.hidden = false;
+        ui.restart.disabled = ui.bob.disabled = true;
+        ui.again.focus({ preventScroll: true });
+      }
+      bot.position.copy(player.position);
+      bot.rotation.y = player.facing;
+      squash += (1 - squash) * damp(10, dt);
+      bot.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+      stride += (finished ? 0 : player.horizontalSpeed) * dt * 3;
+      const swing = finished ? 0 : Math.min(player.horizontalSpeed / player.speed, 1) * 0.12;
+      bot.userData.legs[0].position.z = Math.sin(stride) * swing;
+      bot.userData.legs[1].position.z = -Math.sin(stride) * swing;
+      chase.update(dt, player.position, finished ? { x: 0, y: 0 } : input.consumeLook());
+      sun.position.set(player.position.x + 8, player.position.y + 14, player.position.z + 6);
+      sun.target.position.copy(player.position);
+    });
+    // #endregion
+  </script>
+</body>
+</html>

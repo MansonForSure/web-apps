@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 5 demo — Gravity &amp; jumping</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <style>
+    .panel label:has(input[type="range"]) { white-space: nowrap; }
+    .panel input[type="range"] { min-width: 0; }
+    @media (max-width: 520px) {
+      .hint { bottom: calc(124px + env(safe-area-inset-bottom)); width: calc(100vw - 48px);
+        box-sizing: border-box; white-space: normal; text-align: center; border-radius: 12px; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js", "three/addons/": "../../assets/vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 5</h2>
+    <label>Gravity <input type="range" id="gravity" min="8" max="60" step="1" value="26" /></label>
+    <label>Jump speed <input type="range" id="jumpSpeed" min="4" max="18" step="0.5" value="9" /></label>
+    <label><input type="checkbox" id="variable" checked /> Variable height (tap vs hold)</label>
+    <label><input type="checkbox" id="buffer" checked /> Jump buffering</label>
+    <div class="stat">predicted peak <b id="predicted">–</b><br />measured peak <b id="measured">–</b></div>
+  </div>
+  <div class="hint">
+    <span class="keys">Space to jump (hold = higher) · WASD to move · drag to look</span>
+    <span class="touch">Tap / hold JUMP · left thumb moves · right thumb looks</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, ground, makeBot, box, angleDelta, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+
+    const stage = createStage();
+    const { scene, camera, sun } = stage;
+    ground(scene, 60);
+    // Height markers every metre so you can read the jump height.
+    for (let h = 1; h <= 5; h++) {
+      scene.add(box(0.15, 0.04, 2.5, h % 2 ? '#f4f1ea' : '#ff5b2e', { x: -3, y: h, z: 0 }));
+    }
+    scene.add(box(0.15, 5, 0.15, '#1b1a22', { x: -3, y: 2.5, z: -1.25 }));
+
+    const bot = makeBot();
+    scene.add(bot);
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 9, pitch: 0.25, yaw: 0.5 });
+
+    // A pool of dots that draws the jump arc.
+    const dots = [];
+    const dotGeo = new THREE.SphereGeometry(0.06, 6, 4);
+    const dotMat = new THREE.MeshBasicMaterial({ color: '#ff5b2e' });
+    for (let i = 0; i < 80; i++) {
+      const d = new THREE.Mesh(dotGeo, dotMat);
+      d.visible = false;
+      scene.add(d);
+      dots.push(d);
+    }
+    let nextDot = 0;
+    let dotTimer = 0;
+
+    // #region state
+    const velocity = new THREE.Vector3();
+    let grounded = true;
+    let jumpHeldFlag = false;  // true while the current jump's button is still down
+    let bufferTimer = 0;       // > 0 means "a jump was pressed very recently"
+    let squash = 1;            // 1 = normal, < 1 = squashed, > 1 = stretched
+    // #endregion
+    let facing = 0;
+    let peak = 0;
+
+    const ui = Object.fromEntries(
+      ['gravity', 'jumpSpeed', 'variable', 'buffer', 'predicted', 'measured'].map((id) => [id, document.getElementById(id)]),
+    );
+
+    stage.start((dt) => {
+      // #region prediction
+      const GRAVITY = Number(ui.gravity.value);
+      const JUMP_SPEED = Number(ui.jumpSpeed.value);
+      // Physics: v² = 2·g·h  →  peak height h = v² / (2g)
+      // Ideal peak for a held jump with constant upward gravity.
+      ui.predicted.textContent = ((JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)).toFixed(2) + ' m';
+      // #endregion
+
+      // Walking (same as Lessons 3 and 4).
+      const wish = chase.toWorld(input.getMove()).multiplyScalar(6);
+      const accel = damp(grounded ? 12 : 5, dt); // less control in the air
+      velocity.x += (wish.x - velocity.x) * accel;
+      velocity.z += (wish.z - velocity.z) * accel;
+      if (wish.lengthSq() > 0.05) facing += angleDelta(facing, Math.atan2(wish.x, wish.z)) * damp(12, dt);
+
+      // #region jump
+      // Jump buffering: remember a press for 0.12 s so an early tap still counts on landing.
+      if (input.consumeJump()) bufferTimer = ui.buffer.checked ? 0.12 : 0.0001;
+      else bufferTimer -= dt;
+
+      if (bufferTimer > 0 && grounded) {
+        velocity.y = JUMP_SPEED;   // an instant upward kick...
+        grounded = false;          // ...and gravity takes it from here
+        jumpHeldFlag = true;
+        bufferTimer = 0;
+        squash = 1.35;             // stretch on take-off
+        peak = 0;
+      }
+      if (!input.jumpHeld) jumpHeldFlag = false;
+      // #endregion
+
+      // #region gravity
+      // Gravity changes VELOCITY; velocity changes POSITION. Both scaled by dt.
+      let g = GRAVITY;
+      if (ui.variable.checked && velocity.y > 0 && !jumpHeldFlag) g *= 2.5; // let go early = short hop
+      // #region integrate
+      velocity.y -= g * dt;
+      velocity.y = Math.max(velocity.y, -30);  // terminal velocity
+
+      // Use the updated velocity, including the existing X/Z walking motion.
+      bot.position.addScaledVector(velocity, dt);
+      // #endregion
+      // #endregion
+
+      // #region ground
+      // The floor is y = 0. If we went through it, stand on it.
+      if (bot.position.y <= 0) {
+        if (!grounded) squash = 1 - Math.min(-velocity.y / 30, 0.4); // harder landing = more squash
+        bot.position.y = 0;
+        velocity.y = 0;
+        grounded = true;
+      }
+      // #endregion
+
+      peak = Math.max(peak, bot.position.y);
+      ui.measured.textContent = peak.toFixed(2) + ' m';
+
+      // #region squash
+      // Squash & stretch eases back to 1. Keep volume: wider when shorter.
+      squash += (1 - squash) * damp(10, dt);
+      bot.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+      // Facing changes the look, not the upward velocity.
+      bot.rotation.y = facing;
+      // #endregion
+
+      // Drop an arc dot every 30 ms while airborne.
+      dotTimer -= dt;
+      if (!grounded && dotTimer <= 0) {
+        dotTimer = 0.03;
+        const d = dots[nextDot];
+        nextDot = (nextDot + 1) % dots.length;
+        d.position.copy(bot.position).y += 0.8;
+        d.visible = true;
+      }
+
+      chase.update(dt, bot.position, input.consumeLook());
+      sun.position.set(bot.position.x + 8, 14, bot.position.z + 6);
+      sun.target.position.copy(bot.position);
+    });
+  </script>
+</body>
+</html>

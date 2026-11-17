@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 8 demo — Real 3D models and animation</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": {
+      "three": "../../assets/vendor/three/three.module.js",
+      "three/addons/": "../../assets/vendor/three/addons/"
+    } }
+  </script>
+  <style>
+    .panel { width: 250px; }
+    .panel .emotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .panel button { min-height: 36px; padding: 6px 5px; }
+    .panel button:disabled { opacity: .4; cursor: default; }
+    .panel .fade-label { display: flex; justify-content: space-between; }
+    .panel .fade-label b { font-variant-numeric: tabular-nums; }
+    .panel .credit { font-size: 10px; color: #44434d; }
+    .panel .credit a { color: inherit; text-decoration: underline; }
+    .panel input:disabled { opacity: .4; }
+    .toast { top: 48%; max-width: 80vw; text-align: center; }
+    body:not(.driving) .jump-btn { visibility: hidden; }
+    .hint { max-width: calc(100vw - 44px); white-space: normal; text-align: center; }
+    @media (max-width: 520px) {
+      .panel { width: 224px; gap: 5px; }
+      .panel button { min-height: 35px; }
+      body.driving .hint { bottom: 126px; }
+    }
+    @media (max-height: 520px) {
+      .panel { width: 174px; padding: 6px 8px; gap: 3px; font-size: 10px; }
+      .panel button { min-height: 24px; padding: 3px 1px; font-size: 10px; }
+      .panel .credit { display: none; }
+      .panel .stat { font-size: 10px; }
+      .panel input[type="checkbox"] { width: 13px; height: 13px; }
+      body:not(.driving) label:has(#run) { display: none; }
+      body.driving .emotes { display: none; }
+      .hint, body.driving .hint { left: 73%; bottom: 8px; max-width: 43vw; font-size: 10px; padding: 4px 7px; }
+      body.touch.driving .hint { bottom: 88px; }
+      body.touch .jump-btn { width: 54px; height: 54px; bottom: 14px; right: 14px; font-size: 11px; }
+    }
+    @media (max-width: 520px) and (max-height: 520px) {
+      .panel { width: 152px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 8</h2>
+    <div class="emotes" id="emotes" aria-label="One-shot emotes">
+      <button data-clip="Wave" disabled>Wave</button>
+      <button data-clip="Yes" disabled>Yes</button>
+      <button data-clip="No" disabled>No</button>
+      <button data-clip="ThumbsUp" disabled>ThumbsUp</button>
+      <button data-clip="Punch" disabled>Punch</button>
+      <button data-clip="Dance" disabled>Dance</button>
+      <button data-clip="Jump" disabled>Jump</button>
+    </div>
+    <label class="fade-label" for="fade">Crossfade <b id="fade-value">0.20 s</b></label>
+    <input type="range" id="fade" min="0" max="1" step="0.05" value="0.2" aria-label="Crossfade duration in seconds" />
+    <label><input type="checkbox" id="drive" disabled /> Drive mode</label>
+    <label><input type="checkbox" id="run" checked disabled /> Run (off = walk)</label>
+    <div class="stat">clip <b id="clip">loading…</b> · speed <b id="speed">0.0</b> m/s<br />playback <b id="rate">1.00</b>× · <b id="state">showcase</b></div>
+    <div class="credit">Robot: Tomás Laulhé / Quaternius · CC0<br />Modified by Don McCurdy</div>
+  </div>
+  <div class="hint">
+    <span class="keys" id="keys-hint">Choose an emote · drag to look · enable Drive to move</span>
+    <span class="touch" id="touch-hint">Tap an emote · right thumb look · Drive to move</span>
+  </div>
+  <div class="toast show" id="loading" role="status" aria-live="polite">Loading the robot…</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, ground } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh } from '../kit/physics.js';
+    import { loadCharacter, animateFromController } from '../kit/character.js';
+
+    const stage = createStage({ fov: 45 });
+    const { scene, camera, sun } = stage;
+    // A flat practice lawn: the same simple collider as Lesson 6.
+    ground(scene, 24);
+    const floor = box(24, 0.8, 24, '#9fd08a', { y: -0.4 });
+    scene.add(floor);
+    const colliders = [colliderFromMesh(floor)];
+    // Corner markers and small trees make travel easy to see.
+    for (const x of [-9, 9]) {
+      for (const z of [-9, 9]) {
+        scene.add(box(0.6, 0.9, 0.6, '#ff5b2e', { x, y: 0.45, z }));
+        const tree = new THREE.Mesh(
+          new THREE.ConeGeometry(0.9, 2.3, 7),
+          new THREE.MeshStandardMaterial({ color: '#3f9a5a', flatShading: true }),
+        );
+        tree.position.set(x * 0.8, 1.15, z * 0.8);
+        tree.castShadow = true;
+        scene.add(tree);
+      }
+    }
+    // A thin orange outline frames the showcase without changing the floor height.
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.4, 1.46, 40),
+      new THREE.MeshBasicMaterial({ color: '#ff5b2e', side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    scene.add(ring);
+
+    const input = new Input();
+    const player = new PlayerController();
+    const chase = new ChaseCamera(camera, { distance: 4.8, height: 0.85, pitch: 0.18, yaw: 0.35 });
+    function frameCamera() {
+      const compact = window.innerHeight < 520;
+      chase.height = window.innerWidth < 520 && !compact ? 1.35 : 0.85;
+      if (compact) {
+        // In a short lesson iframe, put the robot beside the controls, not behind them.
+        camera.setViewOffset(window.innerWidth, window.innerHeight,
+          -window.innerWidth * (window.innerWidth < 520 ? 0.28 : 0.22),
+          0, window.innerWidth, window.innerHeight);
+      } else {
+        camera.clearViewOffset();
+      }
+      chase.snapped = false;
+    }
+    frameCamera();
+    window.addEventListener('resize', frameCamera);
+    const ui = Object.fromEntries(
+      ['emotes', 'fade', 'fade-value', 'drive', 'run', 'clip', 'speed', 'rate', 'state',
+       'loading', 'keys-hint', 'touch-hint'].map((id) => [id, document.getElementById(id)]),
+    );
+    const buttons = [...ui.emotes.querySelectorAll('button')];
+    const fadeSeconds = () => Number(ui.fade.value);
+    let character = null;
+
+    // #region load
+    async function loadRobot() {
+      try {
+        character = await loadCharacter(
+          '../../assets/models/RobotExpressive.glb', { height: 1.6 },
+        );
+        scene.add(character.root);
+        character.play('Idle', { fade: 0 });
+        character.mixer.addEventListener('finished', returnToIdle);
+        buttons.forEach((button) => { button.disabled = false; });
+        ui.drive.disabled = false;
+        ui.loading.classList.remove('show');
+      } catch (error) {
+        ui.clip.textContent = 'unavailable';
+        ui.loading.textContent = 'Could not load robot. Check the model path and reload.';
+        ui.loading.classList.add('show');
+      }
+    }
+    loadRobot(); // The stage keeps rendering while the file loads.
+    // #endregion
+
+    // #region emotes
+    // #region emote-action
+    function playEmote(name) {
+      const next = character.actions[name];
+      const previous = character.current;
+      next.reset(); // Also lets you replay the same button before it has finished.
+      next.setEffectiveTimeScale(1);
+      next.setEffectiveWeight(1);
+      next.setLoop(THREE.LoopOnce, 1);
+      next.clampWhenFinished = true;
+      next.play();
+      if (previous && previous !== next) {
+        previous.crossFadeTo(next, fadeSeconds(), false);
+      }
+      character.current = next;
+    }
+    // #endregion
+
+    // #region emote-finish
+    function returnToIdle(event) {
+      // Ignore a fading-out action's event, and let controller state own Drive mode.
+      if (!ui.drive.checked && event.action === character.current) {
+        character.play('Idle', { fade: fadeSeconds() });
+      }
+    }
+    // #endregion
+    ui.emotes.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (character && button && !ui.drive.checked) playEmote(button.dataset.clip);
+    });
+    // #endregion
+
+    ui.fade.addEventListener('input', () => {
+      ui['fade-value'].textContent = `${fadeSeconds().toFixed(2)} s`;
+    });
+    ui.drive.addEventListener('change', () => {
+      const driving = ui.drive.checked;
+      document.body.classList.toggle('driving', driving);
+      buttons.forEach((button) => { button.disabled = driving; });
+      ui.run.disabled = !driving;
+      ring.visible = !driving;
+      player.velocity.set(0, 0, 0);
+      player.bufferTimer = 0;
+      input.consumeJump(); // Do not carry an old Space press into Drive mode.
+      if (!driving) {
+        player.position.set(0, 0, 0);
+        player.facing = 0;
+        player.grounded = false;
+        player.ground = null;
+        player.airTime = 0;
+        character.root.position.copy(player.position);
+        character.root.rotation.y = 0;
+        character.play('Idle', { fade: fadeSeconds() });
+      }
+      chase.distance = driving ? 6.5 : 4.8;
+      chase.pitch = driving ? 0.35 : 0.18;
+      chase.yaw = 0.35;
+      chase.snapped = false;
+      ui['keys-hint'].textContent = driving
+        ? 'WASD move · Space jump · drag to look · turn Run off to walk'
+        : 'Choose an emote · drag to look · enable Drive to move';
+      ui['touch-hint'].textContent = driving
+        ? 'Left thumb move · JUMP · right thumb look'
+        : 'Tap an emote · right thumb look · Drive to move';
+    });
+
+    stage.start((dt) => {
+      if (!character) {
+        chase.update(dt, player.position);
+        return;
+      }
+      // #region drive
+      if (ui.drive.checked) {
+        player.speed = ui.run.checked ? 6.5 : 3;
+        player.update(dt, input, chase, colliders);
+        // Keep this practice demo on the lawn; walls are not today's subject.
+        for (const axis of ['x', 'z']) {
+          const limit = 11;
+          if (Math.abs(player.position[axis]) > limit) {
+            player.position[axis] = THREE.MathUtils.clamp(player.position[axis], -limit, limit);
+            player.velocity[axis] = 0;
+          }
+        }
+        animateFromController(character, player);
+      } else {
+        input.consumeJump(); // Showcase Jump is an animation, not a physics jump.
+      }
+      character.update(dt); // Advance the mixer every frame, in BOTH modes.
+      chase.update(dt, character.root.position, input.consumeLook());
+      // #endregion
+      const name = character.current?.getClip().name || '–';
+      ui.clip.textContent = name;
+      ui.speed.textContent = player.horizontalSpeed.toFixed(1);
+      ui.rate.textContent = (character.current?.getEffectiveTimeScale() ?? 1).toFixed(2);
+      ui.state.textContent = ui.drive.checked ? (player.grounded ? 'ground' : 'air') : 'showcase';
+      buttons.forEach((button) => {
+        const active = button.dataset.clip === name;
+        button.classList.toggle('on', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      sun.position.set(player.position.x + 8, player.position.y + 14, player.position.z + 6);
+      sun.target.position.copy(character.root.position);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 2 demo — Light, materials and shadows</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../../assets/vendor/three/three.module.js",
+        "three/addons/": "../../assets/vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 2 · Material</h2>
+    <div class="row" id="materials">
+      <button data-m="basic">Basic</button>
+      <button data-m="lambert">Lambert</button>
+      <button data-m="standard" class="on">Standard</button>
+    </div>
+    <h2>Lights</h2>
+    <label><input type="checkbox" id="shadows" checked /> Sun casts shadows</label>
+    <label><input type="checkbox" id="hemi" checked /> Sky (hemisphere) light</label>
+    <label><input type="checkbox" id="fog" checked /> Fog</label>
+    <label>Sun <input type="range" id="sunAngle" min="5" max="175" value="55" /></label>
+  </div>
+  <div class="hint"><span class="keys">Drag to orbit · scroll to zoom</span><span class="touch">Drag to orbit · pinch to zoom</span></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    document.body.classList.toggle('touch', window.matchMedia('(pointer: coarse)').matches);
+
+    // #region renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    // #region colour-output
+    // Explicitly keep r187's default screen colour space.
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Compress bright lighting into the range the screen can show.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // Exposure stays at its default of 1.
+    // #endregion
+    renderer.shadowMap.enabled = true;                  // shadows are opt-in
+    document.body.appendChild(renderer.domElement);
+    // #endregion
+
+    // #region atmosphere
+    const scene = new THREE.Scene();
+    const skyColor = new THREE.Color('#bfe1ee');
+    scene.background = skyColor;
+    // Fade surfaces towards the sky colour between these view-space depths.
+    scene.fog = new THREE.Fog(skyColor, 12, 38);
+    // #endregion
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(9, 6, 11);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0.6, 0);
+    controls.enableDamping = true;
+    controls.maxPolarAngle = Math.PI * 0.62;
+    controls.minDistance = 6;
+    controls.maxDistance = 30;
+    fitCamera();
+
+    // #region lights
+    // #region hemisphere
+    // Approximate sky light above and ground bounce below; no ray tracing.
+    const hemi = new THREE.HemisphereLight('#e8f6ff', '#7a6a55', 1.3);
+    scene.add(hemi);
+    // Upward-facing surfaces favour the sky colour, downward-facing ones the ground.
+    // This fill light does not cast shadows.
+    // #endregion
+
+    // #region sunlight
+    // Directional light: parallel rays aimed at the default target, (0, 0, 0).
+    const sun = new THREE.DirectionalLight('#fff1d6', 2.6);
+    sun.castShadow = true;
+    // placeSun() below sets its position, colour and intensity.
+    // Its shadow camera covers only the box configured next.
+    // #endregion
+    // #region shadow-settings
+    sun.shadow.mapSize.set(2048, 2048);   // shadow texture resolution
+    sun.shadow.camera.left = -8;          // bounds in the light's camera space
+    sun.shadow.camera.right = 8;
+    sun.shadow.camera.top = 8;
+    sun.shadow.camera.bottom = -8;
+    sun.shadow.bias = -0.0004;            // small depth offset to reduce shadow acne
+    // #endregion
+    scene.add(sun);
+    // #endregion
+
+    // #region island
+    // #region part-helper
+    // Every visible thing remembers its colour so we can swap material types live.
+    const parts = [];
+    function part(geometry, color, { x = 0, y = 0, z = 0, emissive = null } = {}) {
+      const mesh = new THREE.Mesh(geometry);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;     // this object blocks sunlight...
+      mesh.receiveShadow = true;  // ...and shows shadows that fall on it
+      mesh.userData = { color, emissive };
+      parts.push(mesh);
+      scene.add(mesh);
+      return mesh;
+    }
+    // #endregion
+
+    // #region island-shape
+    // Floating island: a grassy disc on top of an upside-down rocky cone.
+    part(new THREE.CylinderGeometry(4, 3.8, 0.6, 9), '#8fcf6f', { y: -0.3 });
+    const rock = part(new THREE.ConeGeometry(3.8, 4.5, 9), '#a27c5b', { y: -2.85 });
+    rock.rotation.x = Math.PI;
+    // Nine segments keep the silhouette deliberately angular.
+    // #endregion
+
+    // #region decorations
+    // A low-poly tree.
+    part(new THREE.CylinderGeometry(0.16, 0.22, 1.2, 6), '#7a5236', { x: -1.6, y: 0.6, z: -0.8 });
+    part(new THREE.ConeGeometry(0.95, 1.5, 7), '#3f9a5a', { x: -1.6, y: 1.65, z: -0.8 });
+    part(new THREE.ConeGeometry(0.7, 1.2, 7), '#4fb06a', { x: -1.6, y: 2.35, z: -0.8 });
+
+    // Rocks, a player-sized box and a glowing crystal.
+    part(new THREE.DodecahedronGeometry(0.45), '#b8b0a3', { x: 1.9, y: 0.25, z: -1.2 });
+    part(new THREE.DodecahedronGeometry(0.3), '#c9c1b4', { x: 2.5, y: 0.15, z: -0.5 });
+    part(new THREE.BoxGeometry(0.9, 1.6, 0.7), '#ff6a3d', { x: 0.6, y: 0.8, z: 1.2 });
+    const crystal = part(new THREE.OctahedronGeometry(0.4), '#7ee8ff', { x: 2.2, y: 1.2, z: 1.6, emissive: '#37c8ff' });
+    // #endregion
+    // #endregion
+
+    // #region materials
+    // #region material-factory
+    function makeMaterial(type, { color, emissive }) {
+      const common = { color, flatShading: true };
+      if (type === 'basic') return new THREE.MeshBasicMaterial({ color });          // ignores lights
+      if (type === 'lambert') return new THREE.MeshLambertMaterial({ ...common, emissive: emissive ?? '#000' });
+      return new THREE.MeshStandardMaterial({                                       // physically based
+        ...common, roughness: 0.8, metalness: 0.0,
+        emissive: emissive ?? '#000', emissiveIntensity: emissive ? 0.6 : 0,
+      });
+    }
+    // #endregion
+
+    // #region material-swap
+    function useMaterial(type) {
+      for (const mesh of parts) {
+        mesh.material?.dispose();          // release the old material's GPU resources
+        mesh.material = makeMaterial(type, mesh.userData);
+      }
+    }
+    useMaterial('standard');
+    // #endregion
+    // #endregion
+
+    // #region sun
+    function placeSun(degrees) {
+      const a = THREE.MathUtils.degToRad(degrees);
+      sun.position.set(Math.cos(a) * 12, Math.sin(a) * 12, 6);
+      // Low sun = warm orange, high sun = white.
+      const height = Math.sin(a);
+      sun.color.setHSL(0.09, 0.9 - height * 0.6, 0.55 + height * 0.3);
+      sun.intensity = 0.6 + height * 2.4;
+    }
+    placeSun(55);
+    // #endregion
+
+    // UI wiring ---------------------------------------------------------------
+    document.getElementById('materials').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      document.querySelectorAll('#materials button').forEach((b) => b.classList.toggle('on', b === btn));
+      useMaterial(btn.dataset.m);
+    });
+    document.getElementById('shadows').addEventListener('change', (e) => { sun.castShadow = e.target.checked; });
+    document.getElementById('hemi').addEventListener('change', (e) => { hemi.visible = e.target.checked; });
+    document.getElementById('fog').addEventListener('change', (e) => {
+      scene.fog = e.target.checked ? new THREE.Fog(skyColor, 12, 38) : null;
+    });
+    document.getElementById('sunAngle').addEventListener('input', (e) => placeSun(Number(e.target.value)));
+
+    const timer = new THREE.Timer();
+    timer.connect(document);
+    renderer.setAnimationLoop((time) => {
+      timer.update(time);
+      const t = timer.getElapsed();
+      crystal.rotation.y = t * 1.5;
+      crystal.position.y = 1.2 + Math.sin(t * 2) * 0.15;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    function fitCamera() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      // Portrait screens need a wider vertical lens to keep the island's sides in view.
+      const halfFov = THREE.MathUtils.degToRad(45) / 2;
+      camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(halfFov) / Math.min(camera.aspect, 1)));
+      camera.clearViewOffset();
+      // A short phone embed also needs space above the island for the controls.
+      if (window.matchMedia('(pointer: coarse)').matches && window.innerHeight < 550) {
+        camera.fov = Math.max(camera.fov, 65);
+        camera.setViewOffset(window.innerWidth, window.innerHeight, 0, -window.innerHeight * 0.1,
+          window.innerWidth, window.innerHeight);
+      }
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', () => {
+      fitCamera();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

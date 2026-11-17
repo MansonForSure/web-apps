@@ -1,0 +1,5 @@
+RobotExpressive.glb
+Model by Tomás Laulhé (Quaternius) — https://www.patreon.com/quaternius
+License: CC0 1.0 Universal (public domain dedication)
+Modifications by Don McCurdy: added facial-expression morph targets, converted with FBX2GLTF, removed duplicate materials, reduced metalness.
+Retrieved from the three.js repository (examples/models/gltf/RobotExpressive).

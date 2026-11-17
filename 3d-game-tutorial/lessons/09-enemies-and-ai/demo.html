@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 9 demo — Enemies and simple AI</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js", "three/addons/": "../../assets/vendor/three/addons/" } }
+  </script>
+  <style>
+    .panel { width: 218px; }
+    .panel label.range { display: grid; grid-template-columns: 86px 1fr 30px; gap: 5px; }
+    .panel .legend { font-size: 11px; color: #54535c; }
+    .health { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 10px; z-index: 6;
+      padding: 10px 12px; border-radius: 10px; background: #f4f1eaeF; box-shadow: 0 6px 20px #1b1a2220; }
+    .health small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .1em; margin-bottom: 5px; }
+    .hearts { display: flex; gap: 6px; }
+    .hearts svg { width: 24px; height: 23px; fill: #ff5b2e; stroke: #ab381e; stroke-width: 1.5; }
+    .hearts svg.empty { fill: #d3cdc2; stroke: #9e978c; }
+    .state-label { position: fixed; z-index: 3; padding: 4px 8px; border-radius: 7px;
+      background: #f4f1ea; border: 2px solid var(--state-colour); color: #1b1a22;
+      font: 800 11px/1.2 system-ui, sans-serif; white-space: nowrap; pointer-events: none;
+      transform: translate(-50%, -100%); box-shadow: 0 3px 9px #1b1a2222; }
+    .toast { max-width: 75vw; text-align: center; top: 30%; font-size: 16px; }
+    @media (max-width: 520px) {
+      .panel { width: 174px; gap: 5px; }
+      .panel label.range { grid-template-columns: 76px 1fr 24px; gap: 4px; }
+      .panel .legend { max-width: 174px; font-size: 10px; }
+      .panel .stat { font-size: 10px; white-space: nowrap; }
+      .health { padding: 8px 10px; }
+      .hearts { gap: 3px; }
+      .hearts svg { width: 21px; height: 21px; }
+      .hint { bottom: 132px; font-size: 11px; padding: 6px 10px; }
+      .state-label { font-size: 10px; padding: 3px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 9</h2>
+    <label class="range" for="sight">Sight radius <input id="sight" type="range" min="2" max="6" step="0.1" value="3.4" /><b id="sightValue">3.4</b></label>
+    <label class="range" for="speed">Chase speed <input id="speed" type="range" min="1.5" max="6" step="0.1" value="3.8" /><b id="speedValue">3.8</b></label>
+    <label><input id="rings" type="checkbox" checked /> Show sight rings</label>
+    <div class="row"><button id="reset" type="button">Reset arena</button></div>
+    <div class="stat">stomped <b id="stomped">0</b> / 2 · leash <b>6 m</b></div>
+    <div class="legend">Teal patrol · yellow alert<br />Red chase · blue return</div>
+  </div>
+  <div class="health" role="status" aria-label="3 of 3 hearts">
+    <small>YOUR HEARTS</small>
+    <div class="hearts" aria-hidden="true">
+      <svg viewBox="0 0 28 26"><path d="M14 24 3 13C-4 4 8-3 14 5 20-3 32 4 25 13Z" /></svg>
+      <svg viewBox="0 0 28 26"><path d="M14 24 3 13C-4 4 8-3 14 5 20-3 32 4 25 13Z" /></svg>
+      <svg viewBox="0 0 28 26"><path d="M14 24 3 13C-4 4 8-3 14 5 20-3 32 4 25 13Z" /></svg>
+    </div>
+  </div>
+  <div class="hint">
+    <span class="keys">WASD move · hold Space to jump · drag to look · land on a Spiker</span>
+    <span class="touch">Left thumb move · hold JUMP · right thumb look</span>
+  </div>
+  <div class="toast" role="status" aria-live="polite"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, makeBot, angleDelta, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh } from '../kit/physics.js';
+
+    const stage = createStage({ background: '#bfe1ee', fog: [35, 85] });
+    const { scene, camera, sun } = stage;
+    const colliders = [];
+    function solid(w, h, d, x, y, z, colour) {
+      const mesh = box(w, h, d, colour, { x, y, z });
+      scene.add(mesh);
+      colliders.push(colliderFromMesh(mesh));
+      return mesh;
+    }
+    // A flat practice arena: no ledges to distract from the contact rule.
+    solid(20, 1, 19, 0, -0.5, -1, '#d6dfb0');
+    const inset = new THREE.Mesh(new THREE.PlaneGeometry(18.8, 17.8),
+      new THREE.MeshStandardMaterial({ color: '#ebe5cc', roughness: 1 }));
+    inset.rotation.x = -Math.PI / 2;
+    inset.position.set(0, 0.006, -1);
+    inset.receiveShadow = true;
+    scene.add(inset);
+    const grid = new THREE.GridHelper(18, 9, '#b7bca4', '#cfd0b6');
+    grid.position.set(0, 0.012, -1);
+    grid.material.transparent = true;
+    grid.material.opacity = 0.35;
+    scene.add(grid);
+    solid(20, 0.7, 0.35, 0, 0.35, -10.3, '#80b677');
+    solid(20, 0.7, 0.35, 0, 0.35, 8.3, '#80b677');
+    solid(0.35, 0.7, 19, -9.8, 0.35, -1, '#80b677');
+    solid(0.35, 0.7, 19, 9.8, 0.35, -1, '#80b677');
+    for (const x of [-9.5, 9.5]) for (const z of [-10, 8]) {
+      solid(0.7, 1.1, 0.7, x, 0.55, z, '#f4f1ea');
+      scene.add(box(0.78, 0.12, 0.78, '#ff5b2e', { x, y: 1.16, z }));
+    }
+    const bot = makeBot('#ffcf3d');
+    scene.add(bot);
+    const player = new PlayerController();
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 11.5, pitch: 0.66, minPitch: 0.25 });
+    const ui = Object.fromEntries(['sight', 'speed', 'sightValue', 'speedValue', 'rings', 'reset', 'stomped']
+      .map((id) => [id, document.getElementById(id)]));
+    const health = document.querySelector('.health');
+    const hearts = [...document.querySelectorAll('.hearts svg')];
+    const toast = document.querySelector('.toast');
+    let toastTime = 0;
+    function message(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      toastTime = 2;
+    }
+    let stomped = 0;
+    let stride = 0;
+    const colours = { patrol: '#238b82', alert: '#d39611', chase: '#ed4229', return: '#357ac1', squashed: '#88837c' };
+
+    class Spiker {
+      constructor(name, points, colour) {
+        this.name = name;
+        this.path = points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+        this.home = this.path.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(this.path.length);
+        this.position = this.path[0].clone(); // feet, just like the player
+        this.patrolSpeed = 1.5;
+        this.chaseSpeed = 3.8;
+        this.turnRate = 4; // radians per second
+        this.sight = 3.4;
+        this.leash = 6;
+        this.radius = 0.65;
+        this.top = 1.3;
+        this.group = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.65, 1),
+          new THREE.MeshStandardMaterial({ color: colour, roughness: 0.8, flatShading: true }));
+        body.scale.set(1, 0.7, 1);
+        body.position.y = 0.55;
+        this.group.add(body);
+        const spikeGeo = new THREE.ConeGeometry(0.15, 0.43, 5);
+        const spikeMat = new THREE.MeshStandardMaterial({ color: '#ffd08d', roughness: 0.8, flatShading: true });
+        for (let i = 0; i < 7; i++) {
+          const a = i / 7 * Math.PI * 2;
+          const spike = new THREE.Mesh(spikeGeo, spikeMat);
+          const direction = new THREE.Vector3(Math.sin(a) * 0.78, 0.65, Math.cos(a) * 0.78).normalize();
+          spike.position.copy(direction).multiplyScalar(0.64).y += 0.5;
+          spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+          this.group.add(spike);
+        }
+        for (const x of [-0.23, 0.23]) {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 6),
+            new THREE.MeshStandardMaterial({ color: '#fffdf5' }));
+          eye.position.set(x, 0.65, 0.53);
+          const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6),
+            new THREE.MeshStandardMaterial({ color: '#1b1a22' }));
+          pupil.position.set(x, 0.65, 0.68);
+          this.group.add(eye, pupil);
+        }
+        this.group.traverse((part) => { if (part.isMesh) part.castShadow = true; });
+        scene.add(this.group);
+        // Unit-radius geometry scales with the slider: no new geometry each frame.
+        this.ring = new THREE.Mesh(new THREE.RingGeometry(0.985, 1, 64),
+          new THREE.MeshBasicMaterial({ color: colours.patrol, side: THREE.DoubleSide, transparent: true, opacity: 0.7, depthWrite: false }));
+        this.ring.rotation.x = -Math.PI / 2;
+        scene.add(this.ring);
+        const pathGeo = new THREE.BufferGeometry().setFromPoints([...this.path, this.path[0]]
+          .map((p) => p.clone().setY(0.025)));
+        const line = new THREE.Line(pathGeo, new THREE.LineDashedMaterial({ color: '#a3835a', dashSize: 0.25, gapSize: 0.17 }));
+        line.computeLineDistances();
+        scene.add(line);
+        const home = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.26, 20),
+          new THREE.MeshBasicMaterial({ color: '#a3835a', side: THREE.DoubleSide }));
+        home.rotation.x = -Math.PI / 2;
+        home.position.copy(this.home).y = 0.026;
+        scene.add(home);
+        this.label = document.createElement('div');
+        this.label.className = 'state-label';
+        document.body.append(this.label);
+        this.reset();
+      }
+      reset() {
+        this.position.copy(this.path[0]);
+        this.target = 1;
+        this.facing = 0;
+        this.cooldown = 0;
+        this.alive = true;
+        this.group.visible = true;
+        this.group.scale.setScalar(1);
+        this.setState('patrol');
+      }
+      setState(state) {
+        this.state = state;
+        this.stateTime = 0;
+      }
+      // #region move
+      moveTowards(goal, speed, dt) {
+        const dx = goal.x - this.position.x;
+        const dz = goal.z - this.position.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance < 0.08) return true; // close enough, not exact equality
+        const step = Math.min(distance, speed * dt);
+        this.position.x += dx / distance * step;
+        this.position.z += dz / distance * step;
+        const turn = angleDelta(this.facing, Math.atan2(dx, dz));
+        const maxTurn = this.turnRate * dt;
+        this.facing += THREE.MathUtils.clamp(turn, -maxTurn, maxTurn);
+        return distance - step < 0.08;
+      }
+      // #endregion
+      // #region sight
+      canSee(player) {
+        const dx = player.position.x - this.position.x;
+        const dz = player.position.z - this.position.z;
+        const near = dx * dx + dz * dz < this.sight * this.sight;
+        const sameLevel = Math.abs(player.position.y - this.position.y) < 2.5;
+        return player.hearts > 0 && near && sameLevel;
+      }
+      // #endregion
+      update(dt, player) {
+        if (!this.alive) return;
+        this.stateTime += dt;
+        this.cooldown = Math.max(0, this.cooldown - dt);
+        // #region fsm
+        switch (this.state) {
+          case 'patrol':
+            if (this.moveTowards(this.path[this.target], this.patrolSpeed, dt))
+              this.target = (this.target + 1) % this.path.length;
+            if (this.cooldown === 0 && this.canSee(player)) this.setState('alert');
+            break;
+          case 'alert':
+            if (!this.canSee(player)) this.setState('return');
+            else if (this.stateTime >= 0.45) this.setState('chase');
+            break;
+          case 'chase':
+            if (!this.canSee(player) || this.position.distanceTo(this.home) > this.leash) {
+              this.setState('return');
+            } else this.moveTowards(player.position, this.chaseSpeed, dt);
+            break;
+          case 'return':
+            if (this.moveTowards(this.home, this.patrolSpeed * 1.3, dt)) {
+              this.cooldown = 1; // finish returning before noticing you again
+              this.setState('patrol');
+            }
+            break;
+          case 'squashed': {
+            const k = Math.min(1, this.stateTime / 0.35);
+            this.group.scale.set(1 + k * 0.6, Math.max(0.05, 1 - k), 1 + k * 0.6);
+            if (k === 1) { this.alive = false; this.group.visible = false; }
+            break;
+          }
+        }
+        // #endregion
+      }
+      // #region touch
+      touch(player) {
+        if (!this.alive || this.state === 'squashed') return null;
+        const dx = player.position.x - this.position.x;
+        const dz = player.position.z - this.position.z;
+        const reach = this.radius + player.radius;
+        if (dx * dx + dz * dz > reach * reach) return null;
+        const feet = player.position.y;
+        const top = this.position.y + this.top;
+        if (feet > top || feet + player.height < this.position.y) return null;
+        const falling = player.velocity.y < -0.5;
+        const above = feet >= top - 0.22; // a forgiving band around the top
+        return falling && above ? 'stomp' : 'hurt';
+      }
+      // #endregion
+      sync() {
+        this.group.position.copy(this.position);
+        this.group.rotation.y = this.facing;
+        this.ring.position.set(this.position.x, 0.032, this.position.z);
+        this.ring.scale.setScalar(this.sight);
+        this.ring.material.color.set(colours[this.state]);
+        this.ring.visible = ui.rings.checked && this.alive && this.state !== 'squashed';
+        placeLabel(this);
+      }
+    }
+    const enemies = [
+      new Spiker('A', [[-3, -1], [-5, -4], [-2, -5]], '#ff682f'),
+      new Spiker('B', [[3, -3], [5, -5], [4, 0]], '#df472d'),
+    ];
+
+    // #region hurt
+    function hurt(from) {
+      if (player.invulnerable > 0 || player.hearts <= 0) return false;
+      player.hearts -= 1;
+      player.invulnerable = 1; // seconds, not frames
+      player.stun = 0.22;
+      const away = new THREE.Vector3(player.position.x - from.x, 0, player.position.z - from.z);
+      if (away.lengthSq() < 0.0001) away.set(0, 0, 1);
+      away.normalize().multiplyScalar(7);
+      player.velocity.set(away.x, 6.5, away.z);
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = Infinity;
+      player.bufferTimer = 0;
+      updateHearts();
+      message(player.hearts > 0 ? `Ouch — ${player.hearts} hearts left` : 'Out of hearts — Reset arena');
+      return true;
+    }
+    // #endregion
+    function updateHearts() {
+      hearts.forEach((heart, i) => heart.classList.toggle('empty', i >= player.hearts));
+      health.setAttribute('aria-label', `${player.hearts} of 3 hearts`);
+    }
+    const silentInput = {
+      getMove: () => ({ x: 0, y: 0 }),
+      consumeJump: () => { input.consumeJump(); return false; },
+      get jumpHeld() { return input.jumpHeld; },
+    };
+    // A small reusable poof, rather than a new particle system per stomp.
+    const poofGeo = new THREE.IcosahedronGeometry(0.12, 0);
+    const poofMat = new THREE.MeshBasicMaterial({ color: '#fff9e7', transparent: true });
+    const poof = Array.from({ length: 16 }, () => {
+      const mesh = new THREE.Mesh(poofGeo, poofMat);
+      mesh.visible = false;
+      mesh.userData.velocity = new THREE.Vector3();
+      scene.add(mesh);
+      return mesh;
+    });
+    let poofTime = 0;
+    function stomp(enemy) {
+      enemy.setState('squashed');
+      player.position.y = enemy.position.y + enemy.top;
+      player.velocity.y = 11;
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = Infinity;
+      player.bufferTimer = 0;
+      stomped += 1;
+      ui.stomped.textContent = stomped;
+      poofTime = 0.5;
+      poof.forEach((p, i) => {
+        const a = i / poof.length * Math.PI * 2;
+        p.position.copy(enemy.position).y += 0.7;
+        p.userData.velocity.set(Math.cos(a) * 3, 1.5 + (i % 3) * 0.4, Math.sin(a) * 3);
+        p.visible = true;
+      });
+      message(stomped === 2 ? 'Both stomped — Reset to try new settings' : 'Stomp — keep going');
+    }
+    const projected = new THREE.Vector3();
+    // #region label
+    function placeLabel(enemy) {
+      projected.copy(enemy.position).y += 1.9;
+      projected.project(camera); // world position -> normalised screen position
+      const onScreen = projected.z > -1 && projected.z < 1
+        && Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1;
+      enemy.label.hidden = !enemy.alive || !onScreen;
+      enemy.label.style.left = `${(projected.x * 0.5 + 0.5) * innerWidth}px`;
+      enemy.label.style.top = `${(-projected.y * 0.5 + 0.5) * innerHeight}px`;
+      enemy.label.textContent = `${enemy.name} · ${enemy.state.toUpperCase()}`;
+      enemy.label.style.setProperty('--state-colour', colours[enemy.state]);
+    }
+    // #endregion
+    function reset() {
+      player.position.set(0, 0, 4);
+      player.velocity.set(0, 0, 0);
+      player.facing = Math.PI;
+      player.hearts = 3;
+      player.invulnerable = 0;
+      player.stun = 0;
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = 0;
+      player.bufferTimer = 0;
+      bot.visible = true;
+      stomped = 0;
+      ui.stomped.textContent = '0';
+      poofTime = 0;
+      poof.forEach((p) => { p.visible = false; });
+      toast.classList.remove('show');
+      toastTime = 0;
+      input.keys.clear();
+      input.jumpQueued = input.jumpHeld = false;
+      input.stick.x = input.stick.y = 0;
+      chase.yaw = 0;
+      chase.pitch = 0.66;
+      chase.snapped = false;
+      enemies.forEach((enemy) => enemy.reset());
+      updateHearts();
+    }
+    function settings() {
+      ui.sightValue.textContent = Number(ui.sight.value).toFixed(1);
+      ui.speedValue.textContent = Number(ui.speed.value).toFixed(1);
+      enemies.forEach((enemy) => {
+        enemy.sight = Number(ui.sight.value);
+        enemy.chaseSpeed = Number(ui.speed.value);
+      });
+    }
+    ui.sight.addEventListener('input', settings);
+    ui.speed.addEventListener('input', settings);
+    ui.reset.addEventListener('click', reset);
+    settings();
+    reset();
+    // Exposed for small repeatable console experiments, not needed by the game loop.
+    window.arena = { player, enemies, input, chase, hurt, stomp, reset, settings, colliders };
+    stage.start((dt, elapsed) => {
+      dt = Math.max(0, dt); // the first animation timestamp can precede Timer creation
+      // Small physics steps keep a fast fall from skipping the thin stomp band.
+      const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const step = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        // #region recovery
+        player.invulnerable = Math.max(0, player.invulnerable - step);
+        player.stun = Math.max(0, player.stun - step);
+        const stunned = player.stun > 0;
+        player.accel = stunned ? 1.5 : 14;
+        player.airAccel = stunned ? 1.5 : 6;
+        player.update(step, stunned || player.hearts <= 0 ? silentInput : input, chase, colliders);
+        // #endregion
+        enemies.forEach((enemy) => enemy.update(step, player));
+        // #region contact
+        if (player.hearts > 0) for (const enemy of enemies) {
+          const hit = enemy.touch(player);
+          if (hit === 'stomp') stomp(enemy);
+          else if (hit === 'hurt') hurt(enemy.position);
+        }
+        // #endregion
+      }
+      // Jumping over the boundary is allowed; escaping the island restores the arena.
+      if (player.position.y < -8) { reset(); message('Back in the arena'); }
+      bot.position.copy(player.position);
+      bot.rotation.y = player.facing;
+      // #region blink
+      bot.visible = player.invulnerable <= 0 || Math.floor(elapsed * 14) % 2 === 0;
+      // #endregion
+      stride += player.horizontalSpeed * dt * 3;
+      bot.userData.legs.forEach((leg, i) => { leg.position.z = Math.sin(stride + i * Math.PI) * Math.min(player.horizontalSpeed / 6.5, 1) * 0.12; });
+      chase.distance = innerWidth < 520 ? 17 : 11.5;
+      const fov = innerWidth < 520 ? 60 : 55;
+      if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      chase.update(dt, player.position, input.consumeLook());
+      camera.updateMatrixWorld(); // labels need the camera's CURRENT inverse matrix
+      enemies.forEach((enemy) => enemy.sync());
+      poofTime = Math.max(0, poofTime - dt);
+      poofMat.opacity = poofTime / 0.5;
+      poof.forEach((p) => {
+        p.visible = poofTime > 0;
+        p.position.addScaledVector(p.userData.velocity, dt);
+        p.userData.velocity.y -= 5 * dt;
+        p.scale.setScalar(1 + (0.5 - poofTime) * 2);
+      });
+      toastTime = Math.max(0, toastTime - dt);
+      if (toastTime === 0) toast.classList.remove('show');
+      sun.position.set(player.position.x + 8, 14, player.position.z + 6);
+      sun.target.position.copy(player.position);
+    });
+  </script>
+</body>
+</html>

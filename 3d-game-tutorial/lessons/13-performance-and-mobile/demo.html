@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 13 demo — Performance and mobile</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js", "three/addons/": "../../assets/vendor/three/addons/" } }
+  </script>
+  <style>
+    .panel { width: 254px; }
+    .panel select { width: 100%; min-height: 36px; border: 1.5px solid #1b1a22; border-radius: 7px;
+      background: #fff; color: #1b1a22; font: inherit; padding: 4px 6px; }
+    .panel .count { justify-content: space-between; }
+    .panel input[type="range"] { margin: 0; min-height: 28px; }
+    .panel .ratio button { flex: 1; min-height: 36px; padding: 6px; }
+    .panel .stat { font-size: 11px; }
+    .panel .caption { color: #66616a; font-size: 11px; }
+    .hint { max-width: calc(100vw - 48px); white-space: normal; text-align: center; }
+    canvas { touch-action: none; }
+    canvas:focus-visible { outline: 2px solid #ff5b2e; outline-offset: -3px; }
+    @media (max-width: 520px) { .panel { width: 236px; gap: 5px; } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 13</h2>
+    <label for="n" class="count">Trees · N <b id="count">600</b></label>
+    <input type="range" id="n" min="100" max="6000" step="100" value="600" />
+    <label for="method">Method</label>
+    <select id="method">
+      <option value="separate">Separate meshes · 2 per tree</option>
+      <option value="instanced" selected>InstancedMesh · 2 total</option>
+      <option value="merged">Merged geometry · 2 total</option>
+    </select>
+    <label><input type="checkbox" id="shadows" checked /> Shadows on</label>
+    <label><input type="checkbox" id="staticShadows" /> Static shadows (cache the map)</label>
+    <span>Pixel ratio</span>
+    <div class="row ratio" id="ratios" role="group" aria-label="Pixel ratio">
+      <button data-ratio="0.75" aria-pressed="false">0.75×</button>
+      <button data-ratio="1" class="on" aria-pressed="true">1×</button>
+      <button data-ratio="device" aria-pressed="false" id="deviceRatio">Device</button>
+    </div>
+    <div class="stat">FPS <b id="fps">–</b> · frame <b id="ms">–</b> ms</div>
+    <div class="stat">calls <b id="calls">–</b> · triangles <b id="triangles">–</b></div>
+    <div class="stat">geometries <b id="geometries">–</b> · textures <b id="textures">–</b></div>
+    <div class="caption">Same trees; different submission. Change one setting.</div>
+  </div>
+  <div class="hint">
+    <span class="keys">Drag to orbit · wheel to zoom · click view + arrows to pan</span>
+    <span class="touch">One finger orbits · pinch to zoom · two fingers pan</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+    import { createStage } from '../kit/stage.js';
+
+    const { renderer, scene, camera, sun } = createStage({ fog: [75, 160] });
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute('aria-label', 'Forest view: drag to orbit, arrows to pan');
+    if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') document.body.classList.add('touch');
+      renderer.domElement.focus({ preventScroll: true });
+    });
+
+    // #region touch
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.enableDamping = true;
+    controls.minDistance = 8;
+    controls.maxDistance = 110;
+    controls.maxPolarAngle = Math.PI * 0.48; // keep the camera above the ground
+    controls.listenToKeyEvents(renderer.domElement); // only when the view has focus
+    controls.touches.ONE = THREE.TOUCH.ROTATE;
+    controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+    camera.position.set(38, 32, 40);
+    controls.update();
+    // #endregion
+
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(64, 64),
+      new THREE.MeshStandardMaterial({ color: '#a6d68b', roughness: 1 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    sun.position.set(25, 45, 20);
+    Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 110 });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.normalBias = 0.04;
+
+    const ids = ['n', 'count', 'method', 'shadows', 'staticShadows', 'fps', 'ms', 'calls', 'triangles', 'geometries', 'textures'];
+    const ui = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    let forest = null;
+
+    // Repeatable random numbers: swapping methods must not swap the scenery.
+    function randomGenerator(seed) {
+      return () => {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+    function treeLayout(n) {
+      const rand = randomGenerator(13);
+      return Array.from({ length: n }, () => {
+        let x, z;
+        do { x = rand() * 48 - 24; z = rand() * 48 - 24; }
+        while (Math.abs(x - Math.sin(z * 0.18) * 3) < 2.4); // a winding clearing
+        return { x, z, scale: 0.7 + rand() * 0.65, yaw: rand() * Math.PI * 2 };
+      });
+    }
+    function place(dummy, tree) {
+      dummy.position.set(tree.x, 0, tree.z);
+      dummy.rotation.set(0, tree.yaw, 0);
+      dummy.scale.setScalar(tree.scale);
+      dummy.updateMatrix(); // rebuild the matrix after changing position/rotation/scale
+    }
+    function addForestMesh(group, geometry, material) {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = mesh.receiveShadow = true;
+      group.add(mesh);
+      return mesh;
+    }
+
+    // #region separate
+    function buildSeparate(group, trees, geometries, materials) {
+      const dummy = new THREE.Object3D();
+      for (const tree of trees) {
+        place(dummy, tree);
+        for (let part = 0; part < 2; part++) {
+          const mesh = addForestMesh(group, geometries[part], materials[part]);
+          mesh.matrix.copy(dummy.matrix);
+          mesh.matrixAutoUpdate = false; // these trees never move
+        }
+      }
+    }
+    // #endregion
+
+    // #region instanced
+    function buildInstanced(group, trees, geometries, materials) {
+      const dummy = new THREE.Object3D();
+      for (let part = 0; part < 2; part++) {
+        const mesh = new THREE.InstancedMesh(geometries[part], materials[part], trees.length);
+        trees.forEach((tree, i) => {
+          place(dummy, tree);
+          mesh.setMatrixAt(i, dummy.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.computeBoundingSphere(); // the bound must include every instance
+        mesh.castShadow = mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+    }
+    // #endregion
+
+    // #region merged
+    function buildMerged(group, trees, geometries, materials, ownedGeometries) {
+      const dummy = new THREE.Object3D();
+      for (let part = 0; part < 2; part++) {
+        const copies = trees.map((tree) => {
+          place(dummy, tree);
+          return geometries[part].clone().applyMatrix4(dummy.matrix);
+        });
+        // false = no material groups: one geometry, one material, one main-pass call.
+        const merged = mergeGeometries(copies, false);
+        copies.forEach((geometry) => geometry.dispose());
+        if (!merged) throw new Error('Tree geometries must have matching attributes');
+        merged.computeBoundingSphere();
+        ownedGeometries.add(merged);
+        addForestMesh(group, merged, materials[part]);
+      }
+    }
+    // #endregion
+
+    // #region dispose
+    function disposeForest() {
+      if (!forest) return;
+      scene.remove(forest.group); // removal alone does not free GPU buffers
+      forest.group.traverse((object) => {
+        if (object.isInstancedMesh) object.dispose(); // per-instance buffers
+      });
+      // Sets deduplicate resources shared by thousands of separate meshes.
+      forest.geometries.forEach((geometry) => geometry.dispose());
+      forest.materials.forEach((material) => material.dispose());
+      forest = null; // release our JavaScript references too
+    }
+    // #endregion
+
+    // #region rebuild
+    function rebuildForest() {
+      disposeForest();
+      const n = Number(ui.n.value);
+      ui.count.textContent = n.toLocaleString('en-GB');
+      const group = new THREE.Group();
+      const geometries = [
+        new THREE.CylinderGeometry(0.13, 0.22, 1.1, 6).translate(0, 0.55, 0),
+        new THREE.ConeGeometry(0.85, 1.75, 7).translate(0, 1.85, 0),
+      ];
+      geometries.forEach((geometry) => geometry.clearGroups());
+      const materials = ['#795338', '#3f9a5a'].map((color) =>
+        new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true }));
+      forest = { group, geometries: new Set(geometries), materials: new Set(materials) };
+      const builders = { separate: buildSeparate, instanced: buildInstanced, merged: buildMerged };
+      builders[ui.method.value](group, treeLayout(n), geometries, materials, forest.geometries);
+      scene.add(group);
+      renderer.shadowMap.needsUpdate = true; // a cached shadow map is now out of date
+      resetTiming();
+    }
+    // #endregion
+    ui.n.addEventListener('input', () => { ui.count.textContent = Number(ui.n.value).toLocaleString('en-GB'); });
+    ui.n.addEventListener('change', rebuildForest); // rebuild once when the slider is released
+    ui.method.addEventListener('change', rebuildForest);
+
+    // #region shadows
+    function applyShadows() {
+      renderer.shadowMap.enabled = ui.shadows.checked;
+      renderer.shadowMap.autoUpdate = !ui.staticShadows.checked;
+      renderer.shadowMap.needsUpdate = true;
+      // Changing shadow use changes the surface shader as well.
+      scene.traverse((object) => {
+        if (object.isMesh) object.material.needsUpdate = true;
+      });
+      resetTiming();
+    }
+    ui.shadows.addEventListener('change', applyShadows);
+    ui.staticShadows.addEventListener('change', applyShadows);
+    // #endregion
+
+    // #region pixel-ratio
+    function setPixelRatio(value) {
+      const ratio = value === 'device' ? Math.min(window.devicePixelRatio || 1, 2) : Number(value);
+      renderer.setPixelRatio(ratio); // CSS size stays the same; drawing buffer changes
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.querySelectorAll('#ratios button').forEach((button) => {
+        const active = button.dataset.ratio === value;
+        button.classList.toggle('on', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      resetTiming();
+    }
+    document.getElementById('ratios').addEventListener('click', (e) => {
+      const button = e.target.closest('button');
+      if (button) setPixelRatio(button.dataset.ratio);
+    });
+    // #endregion
+    document.getElementById('deviceRatio').textContent = `Device ${Math.min(devicePixelRatio || 1, 2)}×`;
+
+    // Use raw (unclamped) delta for measuring, unlike a physics update.
+    const timer = new THREE.Timer();
+    timer.connect(document);
+    let smoothedMs = null;
+    let lastReadout = 0;
+    let skipSamples = 2;
+    function resetTiming() { smoothedMs = null; skipSamples = 2; }
+
+    // #region stats
+    function frame(time) {
+      timer.update(time);
+      controls.update();
+      renderer.render(scene, camera);
+      const dt = timer.getDelta();
+      if (skipSamples > 0) { skipSamples--; return; } // omit rebuild / resume frames
+      if (dt > 0) {
+        const ms = dt * 1000;
+        const blend = 1 - Math.exp(-dt / 0.5); // about half a second of smoothing
+        smoothedMs = smoothedMs === null ? ms : smoothedMs + (ms - smoothedMs) * blend;
+      }
+      if (time - lastReadout < 250 || smoothedMs === null) return;
+      lastReadout = time; // DOM readouts need not change every frame
+      ui.ms.textContent = smoothedMs.toFixed(1);
+      ui.fps.textContent = (1000 / smoothedMs).toFixed(0);
+      const render = renderer.info.render;
+      ui.calls.textContent = render.calls.toLocaleString('en-GB');
+      ui.triangles.textContent = render.triangles.toLocaleString('en-GB');
+      ui.geometries.textContent = renderer.info.memory.geometries;
+      ui.textures.textContent = renderer.info.memory.textures;
+    }
+    // #endregion
+
+    // #region visibility
+    let inView = true;
+    function syncLoop() {
+      resetTiming();
+      renderer.setAnimationLoop(!document.hidden && inView ? frame : null);
+    }
+    document.addEventListener('visibilitychange', syncLoop);
+    new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      syncLoop(); // stop too when the embedded demo scrolls off screen
+    }).observe(renderer.domElement);
+    // #endregion
+
+    // #region resize
+    function resize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.fov = camera.aspect < 1 ? 70 : 55;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    // #endregion
+    setPixelRatio('1');
+    resize();
+    rebuildForest();
+    syncLoop();
+  </script>
+</body>
+</html>

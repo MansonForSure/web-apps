@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 3 demo — Input &amp; motion</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js", "three/addons/": "../../assets/vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 3</h2>
+    <label><input type="checkbox" id="useDt" checked /> Multiply by delta time</label>
+    <label><input type="checkbox" id="lowFps" /> Simulate a slow phone (15 fps)</label>
+    <label><input type="checkbox" id="smooth" checked /> Smooth acceleration</label>
+    <div class="stat">fps <b id="fps">–</b> · dt <b id="dt">–</b> ms<br />speed <b id="spd">0.0</b> units/s</div>
+  </div>
+  <div class="hint"><span class="keys">WASD / arrow keys to move</span><span class="touch">Drag on the left side to move</span></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, ground, makeBot, angleDelta, damp } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+
+    const stage = createStage();
+    const { scene, camera } = stage;
+    ground(scene, 30);
+    camera.position.set(0, 13, 13);
+    camera.lookAt(0, 0, 0);
+
+    // Some landmarks so you can feel the speed.
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8),
+        new THREE.MeshStandardMaterial({ color: i % 2 ? '#f4f1ea' : '#3b82c4', flatShading: true }),
+      );
+      pillar.position.set(Math.cos(a) * 9, 0.6, Math.sin(a) * 9);
+      pillar.castShadow = true;
+      scene.add(pillar);
+    }
+
+    const bot = makeBot();
+    scene.add(bot);
+
+    // #region controls
+    // No camera controls yet: touch movement starts on the left half of the screen.
+    const input = new Input({ jumpButton: false, look: false });
+
+    // Movement intent will come from either the keyboard or the same touch joystick.
+    // No jump action is used in this lesson; we'll add one in Lesson 5.
+    // #endregion
+
+    // #region state
+    // Persistent motion state: these values survive from one frame to the next.
+    const SPEED = 6;                          // units per second
+    const velocity = new THREE.Vector3();     // where we're going and how fast
+    let facing = 0;
+    let stride = 0;                           // distance walked, drives the leg wiggle
+    // #endregion
+
+    const ui = {
+      useDt: document.getElementById('useDt'),
+      lowFps: document.getElementById('lowFps'),
+      smooth: document.getElementById('smooth'),
+      fps: document.getElementById('fps'),
+      dt: document.getElementById('dt'),
+      spd: document.getElementById('spd'),
+    };
+    let pending = 0;
+    let fpsAvg = 60;
+
+    // #region timing
+    stage.start((frameDt) => {
+      // Simulated slow device: skip frames until 1/15 s has piled up.
+      pending += frameDt;
+      if (ui.lowFps.checked && pending < 1 / 15) return false; // false = don't render
+      const dt = pending;
+      pending = 0;
+      // #endregion
+
+      // #region update
+      // #region wish
+      // 1. Read intent: a 2D vector from keys or joystick (x = right, y = forward).
+      const move = input.getMove();
+
+      // 2. Turn it into a world-space velocity. Screen "up" = world -Z (away from camera).
+      const wish = new THREE.Vector3(move.x, 0, -move.y).multiplyScalar(SPEED);
+      // #endregion
+
+      // #region acceleration
+      // 3. Accelerate smoothly towards it (or snap instantly).
+      if (ui.smooth.checked) velocity.lerp(wish, damp(10, dt));
+      else velocity.copy(wish);
+
+      // With no input, wish is zero: the same smoothing slows us to a stop.
+      // #endregion
+
+      // #region position
+      // 4. Move. Distance = speed × time. Without dt, speed depends on the frame rate!
+      const step = ui.useDt.checked ? dt : 1 / 60;
+      bot.position.addScaledVector(velocity, step);
+      bot.position.x = THREE.MathUtils.clamp(bot.position.x, -14, 14);
+      bot.position.z = THREE.MathUtils.clamp(bot.position.z, -14, 14);
+      // #endregion
+
+      // #region turning
+      // 5. Face the direction of travel, turning the short way round.
+      if (wish.lengthSq() > 0.01) {
+        const target = Math.atan2(wish.x, wish.z);
+        facing += angleDelta(facing, target) * damp(12, dt);
+      }
+      bot.rotation.y = facing;
+      // #endregion
+      // #endregion
+
+      // Cute leg wiggle proportional to distance travelled.
+      const speed = velocity.length();
+      stride += speed * step * 3;
+      const [legL, legR] = bot.userData.legs;
+      const swing = Math.min(speed / SPEED, 1) * 0.12;
+      legL.position.z = Math.sin(stride) * swing;
+      legR.position.z = -Math.sin(stride) * swing;
+      bot.children[0].position.y = 0.75 + Math.abs(Math.sin(stride)) * swing * 0.6;
+
+      // Stats
+      fpsAvg += (1 / Math.max(dt, 1e-3) - fpsAvg) * 0.1;
+      ui.fps.textContent = fpsAvg.toFixed(0);
+      ui.dt.textContent = (dt * 1000).toFixed(1);
+      ui.spd.textContent = ((speed * step) / dt).toFixed(1);
+    });
+  </script>
+</body>
+</html>

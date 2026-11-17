@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 6 demo — Platforms &amp; collisions</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <style>
+    @media (max-width: 520px) {
+      body.touch .hint {
+        bottom: calc(124px + env(safe-area-inset-bottom));
+        width: max-content;
+        max-width: calc(100vw - 32px);
+        box-sizing: border-box;
+        white-space: normal;
+        text-align: center;
+      }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 6</h2>
+    <label><input type="checkbox" id="colliders" /> Show collider boxes</label>
+    <label><input type="checkbox" id="coyote" checked /> Coyote time (0.12 s)</label>
+    <label><input type="checkbox" id="moving" checked /> Platforms move</label>
+    <div class="stat">grounded <b id="grounded">–</b> · on <b id="on">–</b></div>
+  </div>
+  <div class="hint">
+    <span class="keys">WASD move · Space jump · drag to look · climb to the orange block!</span>
+    <span class="touch">Left thumb move · JUMP · right thumb look</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, makeBot } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh, syncCollider } from '../kit/physics.js';
+
+    const stage = createStage();
+    const { scene, camera, sun } = stage;
+
+    // #region level
+    // Each platform is a mesh AND a collider built from the same numbers.
+    const colliders = [];
+    function platform(name, w, h, d, x, y, z, color = '#f4f1ea') {
+      const mesh = box(w, h, d, color, { x, y: y - h / 2, z }); // y = top surface
+      scene.add(mesh);
+      const c = colliderFromMesh(mesh);
+      c.name = name;
+      colliders.push(c);
+      return c;
+    }
+
+    platform('floor', 16, 1, 16, 0, 0, 0, '#9fd08a');          // the floor island
+    platform('step 1', 2.5, 1, 2.5, 3, 1, -3);                  // a staircase of blocks
+    platform('step 2', 2.5, 1, 2.5, 6, 2, -5);
+    platform('step 3', 2.5, 1, 2.5, 6, 3.2, -9);
+    platform('wall', 1, 3, 6, -3, 3, -2, '#c9c1b4');          // a wall to slide along
+    const slider = platform('slider', 3, 0.6, 3, 1.5, 3.6, -11, '#3b82c4');   // moves side to side
+    const lift = platform('lift', 3, 0.6, 3, -5, 1, -9, '#3b82c4');         // moves up and down
+    platform('goal!', 3, 1, 3, -5, 6, -13, '#ff5b2e');                       // the goal
+    // #endregion
+
+    // #region collider-debug
+    const helpers = colliders.map((c) => {
+      const helper = new THREE.Box3Helper(new THREE.Box3(c.min, c.max), '#ff2d55');
+      helper.visible = false;
+      scene.add(helper);
+      return helper;
+    });
+    // #endregion
+
+    const bot = makeBot('#ffcf3d');
+    scene.add(bot);
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 8, pitch: 0.5 });
+    const player = new PlayerController();
+    player.position.set(0, 0, 4);
+
+    let squash = 1;
+    player.onLand = (speed) => { squash = 1 - Math.min(speed / 30, 0.4); };
+    player.onJump = () => { squash = 1.3; };
+
+    const ui = Object.fromEntries(['colliders', 'coyote', 'moving', 'grounded', 'on'].map((id) => [id, document.getElementById(id)]));
+    ui.colliders.addEventListener('change', () => helpers.forEach((h) => { h.visible = ui.colliders.checked; }));
+
+    let t = 0;
+    stage.start((dt) => {
+      // #region moving
+      // Move platform meshes first, then refresh their colliders (this records `delta`).
+      if (ui.moving.checked) t += dt;
+      slider.mesh.position.x = 1.5 + Math.sin(t * 0.9) * 3;
+      lift.mesh.position.y = 1 - 0.3 + (Math.sin(t * 0.7) * 0.5 + 0.5) * 4;
+      syncCollider(slider);
+      syncCollider(lift);
+      // #endregion
+
+      // #region frame
+      player.coyoteTime = ui.coyote.checked ? 0.12 : 0;
+      player.update(dt, input, chase, colliders);
+
+      // Fell off the world? Back to the start.
+      if (player.position.y < -12) {
+        player.position.set(0, 0, 4);
+        player.velocity.set(0, 0, 0);
+      }
+
+      bot.position.copy(player.position);
+      bot.rotation.y = player.facing;
+      // #endregion
+      squash += (1 - squash) * Math.min(1, dt * 10);
+      bot.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+
+      helpers.forEach((h, i) => h.box.set(colliders[i].min, colliders[i].max));
+      ui.grounded.textContent = player.grounded ? 'yes' : 'no';
+      ui.on.textContent = player.ground ? player.ground.name : 'air';
+
+      chase.update(dt, player.position, input.consumeLook());
+      sun.position.set(player.position.x + 8, player.position.y + 14, player.position.z + 6);
+      sun.target.position.copy(player.position);
+    });
+  </script>
+</body>
+</html>

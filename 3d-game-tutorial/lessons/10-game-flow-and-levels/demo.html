@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 10 demo — Game flow, levels and saving</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js", "three/addons/": "../../assets/vendor/three/addons/" } }
+  </script>
+  <style>
+    [hidden] { display: none !important; }
+    button { cursor: pointer; font: inherit; font-weight: 750; border: 1.5px solid #1b1a22; border-radius: 8px; padding: 10px 14px; background: #fff; color: #1b1a22; }
+    button:disabled { opacity: .45; cursor: default; }
+    button:focus-visible, textarea:focus-visible { outline: 3px solid #2fd9ff; outline-offset: 3px; }
+    .primary { background: #ff5b2e; color: #fff; }
+    .panel { min-width: 220px; }
+    .panel .row button { min-height: 36px; }
+    .screen { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(27,26,34,.18); pointer-events: none; }
+    .screen.title { justify-content: flex-start; padding-left: 30px; background: linear-gradient(90deg,rgba(191,225,238,.5),transparent 65%); }
+    .card { width: min(310px,calc(100vw - 66px)); padding: 23px; border: 2px solid #1b1a22; border-radius: 16px; background: #f4f1ea; box-shadow: 5px 6px 0 #1b1a22; pointer-events: auto; }
+    .screen.title .card { transform: translateY(28px); }
+    body.touch .card .keys, body:not(.touch) .card .touch { display: none; }
+    .card h1, .card h2 { font-size: 30px; line-height: 1.1; margin: 8px 0 12px; letter-spacing: -.04em; }
+    .card h1 span { color: #ff5b2e; }
+    .eyebrow { margin: 0; font: 750 11px/1.4 ui-monospace,monospace; letter-spacing: .1em; text-transform: uppercase; color: #a43314; }
+    .card p { line-height: 1.5; }
+    .card .primary { width: 100%; }
+    .card .actions { display: flex; gap: 8px; margin-top: 10px; }
+    .card .actions button { flex: 1; }
+    .level-list { display: flex; gap: 8px; margin-top: 10px; }
+    .level-list button { flex: 1; padding: 9px 4px; }
+    .level-list small { display: block; font: 600 10px/1.4 ui-monospace,monospace; margin-top: 3px; }
+    .level-list .selected { background: #1b1a22; color: #f4f1ea; }
+    .small { font-size: 12px; color: #55515a; }
+    .result { font: 700 18px/1.5 ui-monospace,monospace; }
+    .editor { position: fixed; z-index: 10; top: 12px; right: 12px; width: min(350px,calc(100vw - 48px)); padding: 16px; background: #f4f1ea; border: 2px solid #1b1a22; border-radius: 12px; box-shadow: 5px 6px 0 #1b1a22; }
+    .editor header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .editor h2 { font-size: 17px; margin: 0; }
+    .editor p { margin: 10px 0; }
+    .editor label { display: block; margin-bottom: 6px; font-weight: 750; }
+    .editor textarea { box-sizing: border-box; width: 100%; height: min(340px,46vh); resize: none; padding: 10px; border: 1px solid #98918a; border-radius: 6px; background: #fff; color: #1b1a22; font: 12px/1.5 ui-monospace,monospace; touch-action: auto; user-select: text; -webkit-user-select: text; }
+    .editor .actions { display: flex; gap: 8px; margin-top: 10px; }
+    #editor-message { min-height: 36px; font-size: 12px; line-height: 1.45; color: #a43314; }
+    body:not([data-state="playing"]) .jump-btn, body[data-editor="open"] .jump-btn { display: none !important; }
+    body[data-state="title"] .hint, body[data-state="complete"] .hint { display: none; }
+    body[data-editor="open"] .hint { display: none; }
+    body.touch .hint { bottom: 124px; max-width: calc(100vw - 42px); white-space: normal; text-align: center; border-radius: 10px; }
+    .toast { top: 26%; font-size: 15px; max-width: 75vw; text-align: center; }
+    @media (max-width: 520px) {
+      .panel { min-width: 0; max-width: calc(100vw - 44px); }
+      .panel .stat { font-size: 11px; }
+      .screen.title { align-items: flex-end; justify-content: center; padding: 0 0 24px; }
+      .card { padding: 18px; width: calc(100vw - 82px); }
+      .screen.title .card { transform: none; }
+      .card h1, .card h2 { font-size: 27px; }
+      .editor { top: 160px; right: 10px; width: calc(100vw - 56px); padding: 16px; }
+      .editor textarea { height: min(290px,32vh); }
+    }
+    @media (max-height: 540px) { .screen.title { padding-left: 280px; } .card { padding: 14px; } .card p { margin: 7px 0; } .editor { top: 12px; } .editor textarea { height: 25vh; } body[data-editor="open"] .panel { display: none; } }
+    @media (max-width: 520px) and (max-height: 540px) {
+      body:not([data-state="playing"]) .panel { display: none; }
+      .screen.title { padding: 0; align-items: center; }
+      .card { width: calc(100vw - 66px); padding: 14px; }
+      .card h1, .card h2 { font-size: 23px; margin: 6px 0; }
+      .card p { margin: 6px 0; font-size: 11px; }
+      .card .eyebrow { font-size: 9px; }
+      .editor { top: 8px; }
+      .editor textarea { height: 25vh; }
+      .editor p { margin: 6px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 10</h2>
+    <strong id="level-name">First hop</strong>
+    <div class="stat">state <b id="state">title</b> · time <b id="time">0.00</b> s</div>
+    <div class="stat">GPU geometries <b id="memory">–</b> · textures <b id="textures">–</b></div>
+    <div class="row">
+      <button id="pause">Pause</button><button id="restart">Restart</button><button id="edit">Editor</button>
+    </div>
+  </div>
+  <section id="title-screen" class="screen title" hidden aria-label="Title screen">
+    <div class="card">
+      <p class="eyebrow">Three tiny levels · one loop</p>
+      <h1>Little <span>Skyhop</span></h1>
+      <p>Hop across the platforms and land on the <strong>orange goal block</strong>.</p>
+      <button id="play" class="primary">Play</button>
+      <p class="small" style="margin-bottom:0">Choose a level · best time shown below</p>
+      <div id="level-list" class="level-list" aria-label="Level select"></div>
+      <p class="small" id="save-status">Progress is saved in this browser.</p>
+      <p class="small"><span class="keys">WASD move · hold Space to jump<br />Drag to look · Esc / P to pause</span><span class="touch">Left thumb moves · hold JUMP<br />Right thumb looks · Pause button</span></p>
+    </div>
+  </section>
+  <section id="pause-screen" class="screen" hidden aria-label="Pause screen">
+    <div class="card">
+      <p class="eyebrow">Take your time</p><h2>Paused</h2>
+      <p>The robot and timer are frozen. The scene is still being drawn.</p>
+      <button id="resume" class="primary">Resume</button>
+      <div class="actions"><button id="pause-restart">Restart</button><button id="pause-title">Title</button></div>
+    </div>
+  </section>
+  <section id="complete-screen" class="screen" hidden aria-label="Level complete">
+    <div class="card">
+      <p class="eyebrow" id="complete-level">First hop</p><h2>Level complete</h2>
+      <p class="result" id="result"></p>
+      <p class="small" id="record"></p>
+      <button id="next" class="primary">Next level</button>
+      <div class="actions"><button id="again">Play again</button><button id="complete-title">Title</button></div>
+    </div>
+  </section>
+  <aside id="editor" class="editor" hidden aria-label="Level editor drawer">
+    <header><h2>Level editor</h2><button id="close-editor" aria-label="Close level editor">Close</button></header>
+    <p class="small">Boxes: [x, topY, z, width, height, depth]. Edited runs are practice, not saved records.</p>
+    <label for="level-json">Current level JSON</label>
+    <textarea id="level-json" spellcheck="false"></textarea>
+    <div class="actions"><button id="rebuild" class="primary">Rebuild</button><button id="original">Original</button></div>
+    <p id="editor-message" role="status" aria-live="polite"></p>
+  </aside>
+  <div class="hint"><span class="keys">WASD move · hold Space to jump · drag to look · Esc / P pause</span><span class="touch">Left thumb move · hold JUMP · right thumb look</span></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStage, box, makeBot } from '../kit/stage.js';
+    import { Input } from '../kit/input.js';
+    import { ChaseCamera } from '../kit/chase-camera.js';
+    import { PlayerController } from '../kit/player.js';
+    import { colliderFromMesh } from '../kit/physics.js';
+
+    // #region levels
+    // y is the TOP of each box, not its centre. Spawn is the robot's feet.
+    const LEVELS = [
+      {
+        id: 'first-hop', name: 'First hop', spawn: [0, 0, 2],
+        platforms: [[0, 0, 0, 7, 1, 7], [0, 0, -6.6, 5, 1, 5], [0, 0, -13.2, 5, 1, 5]],
+        goal: [0, 0.65, -13.5, 2.4, 0.65, 2.4],
+      },
+      {
+        id: 'side-step', name: 'Side step', spawn: [0, 0, 2],
+        platforms: [[0, 0, 0, 7, 1, 7], [2.6, 0.45, -6.5, 4.8, 1, 4.8], [-1.2, 0.45, -12.5, 4.8, 1, 4.8]],
+        goal: [-1.2, 1.1, -12.7, 2.4, 0.65, 2.4],
+      },
+      {
+        id: 'little-climb', name: 'Little climb', spawn: [0, 0, 2],
+        platforms: [[0, 0, 0, 7, 1, 7], [0, 0.65, -6, 3.8, 1, 3.8], [2, 1.3, -11.2, 3.8, 1, 3.8], [-1, 1.95, -16.2, 3.8, 1, 3.8]],
+        goal: [-1, 2.6, -16.4, 2.4, 0.65, 2.4],
+      },
+    ];
+    // #endregion
+
+    const ui = Object.fromEntries([...document.querySelectorAll('[id]')].map(el => [el.id, el]));
+    const stage = createStage({ fov: 60 });
+    const { scene, camera, renderer, sun } = stage;
+    const input = new Input();
+    const chase = new ChaseCamera(camera, { distance: 9, pitch: 0.65 });
+    const player = new PlayerController();
+    const bot = makeBot('#ffcf3d');
+    scene.add(bot); // The robot belongs to the game, not to any individual level.
+    let levelGroup = null, goalCollider = null, currentData = null;
+    const colliders = [];
+    let levelIndex = 0, levelTime = 0, edited = false, editorOpen = false;
+    let state = 'boot';
+    let saveAvailable = true;
+    let toastTimeout;
+
+    function toast(message) {
+      ui.toast.textContent = message;
+      ui.toast.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => ui.toast.classList.remove('show'), 2200);
+    }
+    function clearInput() {
+      input.keys.clear();
+      input.stick.x = input.stick.y = 0;
+      input.jumpHeld = input.jumpQueued = false;
+      input.consumeLook();
+    }
+
+    // #region save
+    const SAVE_KEY = 'cube-game.lesson10.v1';
+    function freshSave() { return { version: 1, highestUnlocked: 0, bestTimes: {} }; }
+    function loadSave() {
+      try {
+        const data = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null');
+        if (!data || data.version !== 1) return freshSave();
+        const clean = freshSave();
+        if (Number.isInteger(data.highestUnlocked)) {
+          clean.highestUnlocked = THREE.MathUtils.clamp(data.highestUnlocked, 0, LEVELS.length - 1);
+        }
+        for (const level of LEVELS) {
+          const time = data.bestTimes?.[level.id];
+          if (Number.isFinite(time) && time > 0) clean.bestTimes[level.id] = time;
+        }
+        return clean;
+      } catch { saveAvailable = false; return freshSave(); }
+    }
+    function persist() {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); saveAvailable = true; }
+      catch { saveAvailable = false; toast('Saving is unavailable. You can still play.'); }
+      ui['save-status'].textContent = saveAvailable
+        ? 'Progress is saved in this browser.' : 'Progress lasts for this visit only.';
+    }
+    const save = loadSave();
+    // #endregion
+
+    // #region dispose
+    function disposeLevel() {
+      if (!levelGroup) return;
+      scene.remove(levelGroup); // Stop drawing the old level.
+      levelGroup.traverse(object => {
+        if (!object.isMesh) return;
+        object.geometry.dispose(); // Release this level's GPU buffers.
+        object.material.dispose(); // box() gives every mesh its own material.
+      });
+      colliders.length = 0; // Invisible collision walls must go too.
+      player.ground = null;
+      goalCollider = null;
+      levelGroup.clear();
+      levelGroup = null;
+    }
+    // #endregion
+
+    // #region build
+    function buildLevel(data) {
+      disposeLevel();
+      currentData = data;
+      levelGroup = new THREE.Group();
+      scene.add(levelGroup);
+      function addBox([x, y, z, w, h, d], colour) {
+        const mesh = box(w, h, d, colour, { x, y: y - h / 2, z });
+        levelGroup.add(mesh);
+        const collider = colliderFromMesh(mesh);
+        colliders.push(collider);
+        return collider;
+      }
+      data.platforms.forEach((p, i) => addBox(p, i === 0 ? '#9fd08a' : '#f4f1ea'));
+      goalCollider = addBox(data.goal, '#ff5b2e');
+      levelTime = 0;
+      player.position.fromArray(data.spawn);
+      player.velocity.set(0, 0, 0);
+      player.grounded = false;
+      player.ground = null;
+      player.airTime = Infinity;
+      player.bufferTimer = 0;
+      player.facing = Math.PI;
+      chase.yaw = 0; chase.pitch = camera.aspect < 0.8 ? 0.48 : 0.65; chase.snapped = false;
+      clearInput();
+      ui['level-name'].textContent = `${levelIndex + 1} / ${LEVELS.length} · ${data.name}${edited ? ' (practice)' : ''}`;
+      ui['level-json'].value = JSON.stringify(data, null, 2);
+    }
+    // #endregion
+
+    function renderLevelList() {
+      ui['level-list'].replaceChildren();
+      LEVELS.forEach((level, i) => {
+        const button = document.createElement('button');
+        button.disabled = i > save.highestUnlocked;
+        button.classList.toggle('selected', i === levelIndex);
+        button.setAttribute('aria-pressed', String(i === levelIndex));
+        const best = save.bestTimes[level.id];
+        button.innerHTML = `${i + 1}<small>${button.disabled ? 'Locked' : best === undefined ? '—' : best.toFixed(2) + ' s'}</small>`;
+        button.setAttribute('aria-label', `${level.name}${button.disabled ? ', locked' : ''}`);
+        button.addEventListener('click', () => {
+          levelIndex = i; edited = false; buildLevel(LEVELS[i]); renderLevelList();
+        });
+        ui['level-list'].append(button);
+      });
+      ui['save-status'].textContent = saveAvailable ? 'Progress is saved in this browser.' : 'Progress lasts for this visit only.';
+    }
+
+    // #region states
+    const transitions = {
+      boot: ['title'], title: ['playing', 'paused'],
+      playing: ['paused', 'complete', 'title'],
+      paused: ['playing', 'title'], complete: ['playing', 'title', 'paused'],
+    };
+    function setState(next) {
+      if (next !== state && !transitions[state].includes(next)) return;
+      state = next;
+      document.body.dataset.state = next;
+      clearInput(); // Do not carry a menu press into a jump or a movement.
+      if (['title', 'complete'].includes(next)) ui.toast.classList.remove('show');
+      ui.state.textContent = next;
+      ui['title-screen'].hidden = next !== 'title' || editorOpen;
+      ui['pause-screen'].hidden = next !== 'paused' || editorOpen;
+      ui['complete-screen'].hidden = next !== 'complete' || editorOpen;
+      ui.pause.disabled = !['playing', 'paused'].includes(next) || editorOpen;
+      ui.restart.disabled = ui.edit.disabled = editorOpen;
+      ui.pause.textContent = next === 'paused' ? 'Resume' : 'Pause';
+      if (next === 'title') renderLevelList();
+    }
+    // #endregion
+
+    // #region complete
+    function completeLevel() {
+      if (state !== 'playing') return; // Count this finish exactly once.
+      setState('complete');
+      const id = LEVELS[levelIndex].id;
+      const previous = save.bestTimes[id];
+      const record = previous === undefined || levelTime < previous;
+      if (!edited) {
+        if (record) save.bestTimes[id] = levelTime;
+        save.highestUnlocked = Math.max(save.highestUnlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+        persist();
+      }
+      ui['complete-level'].textContent = currentData.name;
+      ui.result.textContent = `${levelTime.toFixed(2)} s${edited ? '' : ' · best ' + save.bestTimes[id].toFixed(2) + ' s'}`;
+      ui.record.textContent = edited ? 'Practice run — no progress or records saved.'
+        : record ? 'New best time.' : 'Finished. Your faster time is kept.';
+      ui.next.textContent = edited || levelIndex === LEVELS.length - 1 ? 'Back to title' : 'Next level';
+    }
+    // #endregion
+
+    function startLevel(index) {
+      levelIndex = index; edited = false;
+      buildLevel(LEVELS[index]); setState('playing');
+    }
+    function restartLevel() { buildLevel(currentData); setState('playing'); }
+    function toTitle() {
+      edited = false; buildLevel(LEVELS[levelIndex]); setState('title');
+    }
+    function togglePause() {
+      if (editorOpen) return;
+      if (state === 'playing') setState('paused');
+      else if (state === 'paused') setState('playing');
+    }
+    ui.play.onclick = () => startLevel(levelIndex);
+    ui.pause.onclick = togglePause;
+    ui.resume.onclick = () => setState('playing');
+    ui.restart.onclick = ui['pause-restart'].onclick = ui.again.onclick = restartLevel;
+    ui['pause-title'].onclick = ui['complete-title'].onclick = toTitle;
+    ui.next.onclick = () => edited || levelIndex === LEVELS.length - 1 ? toTitle() : startLevel(levelIndex + 1);
+    window.addEventListener('keydown', event => {
+      if (!event.repeat && ['Escape', 'KeyP'].includes(event.code)) {
+        event.preventDefault();
+        if (editorOpen) closeEditor(); else togglePause();
+      }
+    });
+    window.addEventListener('blur', () => { if (state === 'playing') setState('paused'); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && state === 'playing') setState('paused');
+    });
+
+    function validateLevel(data) {
+      const tuple = (value, n) => Array.isArray(value) && value.length === n
+        && value.every(x => Number.isFinite(x) && Math.abs(x) <= 100);
+      const validBox = value => tuple(value, 6) && value.slice(3).every(x => x > 0 && x <= 30);
+      if (!data || typeof data.name !== 'string' || !data.name.trim() || data.name.length > 40) {
+        throw new Error('Give the level a name of 1–40 characters.');
+      }
+      if (!tuple(data.spawn, 3)) throw new Error('Spawn needs three numbers: [x, y, z].');
+      if (!Array.isArray(data.platforms) || data.platforms.length < 1 || data.platforms.length > 30
+        || !data.platforms.every(validBox) || !validBox(data.goal)) {
+        throw new Error('Use 1–30 platform boxes and a goal box: [x, topY, z, w, h, d], with positive sizes.');
+      }
+      return data;
+    }
+
+    // #region editor
+    function rebuildFromEditor() {
+      let data;
+      try { data = JSON.parse(ui['level-json'].value); }
+      catch {
+        ui['editor-message'].textContent = 'That JSON is not quite right. Check commas, brackets and double quotes. Your level is unchanged.';
+        return;
+      }
+      try { validateLevel(data); }
+      catch (error) { ui['editor-message'].textContent = error.message; return; }
+      edited = true;
+      buildLevel(data);
+      setState('paused');
+      ui['editor-message'].textContent = 'Rebuilt. Close the drawer, then Resume to test your practice level.';
+    }
+    // #endregion
+    function openEditor() {
+      if (state !== 'paused') setState('paused');
+      editorOpen = true; document.body.dataset.editor = 'open';
+      ui.editor.hidden = false;
+      ui['level-json'].value = JSON.stringify(currentData, null, 2);
+      ui['editor-message'].textContent = 'Change a number, then press Rebuild. The game stays paused while you edit.';
+      setState(state);
+    }
+    function closeEditor() {
+      editorOpen = false; delete document.body.dataset.editor;
+      ui.editor.hidden = true;
+      ui['level-json'].blur();
+      setState(state); ui.pause.focus();
+    }
+    ui.edit.onclick = openEditor;
+    ui['close-editor'].onclick = closeEditor;
+    ui.rebuild.onclick = rebuildFromEditor;
+    ui.original.onclick = () => {
+      edited = false; buildLevel(LEVELS[levelIndex]);
+      ui['editor-message'].textContent = 'Original level restored. Close, then Resume.';
+    };
+    // The shared Input listens on window: keep editing gestures and typing local.
+    ui.editor.addEventListener('pointerdown', event => event.stopPropagation());
+    ui.editor.addEventListener('keydown', event => {
+      event.stopPropagation();
+      if (event.code === 'Escape') { event.preventDefault(); closeEditor(); }
+    });
+
+    buildLevel(LEVELS[0]);
+    setState('title');
+    stage.start(dt => {
+      // #region simulation
+      const look = input.consumeLook();
+      if (state === 'playing') {
+        levelTime += dt;
+        player.update(dt, input, chase, colliders);
+        if (player.position.y < -12) {
+          buildLevel(currentData); // A new attempt, with a fresh timer.
+          toast('Back to the start — try that jump again.');
+        } else if (player.grounded && player.ground === goalCollider) {
+          completeLevel();
+        }
+      } else { input.consumeJump(); } // Ignore jump presses made in a menu.
+      // #endregion
+      bot.position.copy(player.position);
+      bot.rotation.y = player.facing;
+      if (state === 'title') {
+        if (camera.aspect < 0.8) {
+          camera.position.set(17, 20, 25); camera.lookAt(0, -6, -5);
+        } else {
+          camera.position.set(11, 13, 15); camera.lookAt(0, 0, -5);
+        }
+      } else {
+        chase.distance = camera.aspect < 0.8 ? 10.5 : 9;
+        chase.update(dt, player.position, state === 'playing' ? look : { x: 0, y: 0 });
+      }
+      sun.position.set(player.position.x + 8, player.position.y + 14, player.position.z + 6);
+      sun.target.position.copy(player.position);
+      ui.time.textContent = levelTime.toFixed(2);
+      ui.memory.textContent = renderer.info.memory.geometries;
+      ui.textures.textContent = renderer.info.memory.textures;
+      // createStage renders AFTER this callback, even while the simulation is paused.
+    });
+  </script>
+</body>
+</html>

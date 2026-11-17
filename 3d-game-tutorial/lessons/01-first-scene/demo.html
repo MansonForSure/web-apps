@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Lesson 1 demo — Your first 3D scene</title>
+  <link rel="stylesheet" href="../kit/demo.css" />
+  <script type="importmap">
+    { "imports": { "three": "../../assets/vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div class="panel">
+    <h2>Lesson 1</h2>
+    <label><input type="checkbox" id="spin" checked /> Spin the cube</label>
+    <label><input type="checkbox" id="helpers" checked /> Show axes &amp; grid</label>
+    <span class="stat">red = X, green = Y, blue = Z</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // #region scene
+    // 1. The SCENE holds everything that exists in our 3D world.
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#f4f1ea');
+
+    // 2. The CAMERA is our eye: field of view, aspect ratio, near and far clip planes.
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(3, 2.5, 4);   // x = right, y = up, z = towards you
+    camera.lookAt(0, 0, 0);
+
+    // 3. The RENDERER draws the scene, as seen by the camera, onto a <canvas>.
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    // #endregion
+
+    // #region mesh
+    // A MESH = GEOMETRY (the shape) + MATERIAL (how its surface looks).
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshNormalMaterial(); // colours faces by direction, needs no lights
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.y = 0.5;
+    scene.add(cube);
+    // #endregion
+
+    // #region helpers
+    const axes = new THREE.AxesHelper(2.5);
+    const grid = new THREE.GridHelper(10, 10, '#b9b3a6', '#d9d3c6');
+    scene.add(axes, grid);
+    // #endregion
+
+    // #region loop
+    // The GAME LOOP: update the world a little, draw it, repeat (~60 times a second).
+    const timer = new THREE.Timer();
+    timer.connect(document);
+    const spin = document.getElementById('spin');
+
+    renderer.setAnimationLoop((time) => {
+      timer.update(time);
+      const dt = timer.getDelta(); // seconds since the last frame
+
+      if (spin.checked) {
+        cube.rotation.x += 0.6 * dt;   // radians per second
+        cube.rotation.y += 0.9 * dt;
+      }
+      renderer.render(scene, camera);
+    });
+    // #endregion
+
+    // #region resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    // #endregion
+
+    document.getElementById('helpers').addEventListener('change', (e) => {
+      axes.visible = grid.visible = e.target.checked;
+    });
+  </script>
+</body>
+</html>
