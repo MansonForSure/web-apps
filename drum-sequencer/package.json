@@ -1,0 +1,11 @@
+{
+  "name": "backbeat-drum-sequencer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-browser step sequencer built on a real multi-miked acoustic drum kit",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "for f in src/*.js; do node --check \"$f\" || exit 1; done"
+  }
+}

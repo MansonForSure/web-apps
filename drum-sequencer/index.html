@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#12100e" />
+    <meta
+      name="description"
+      content="Backbeat is a free drum sequencer in your browser, built on a real multi-miked acoustic drum kit with velocity layers, round-robin hits, ghost notes, flams, swing and humanize."
+    />
+    <title>Backbeat — Acoustic drum sequencer</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preload" href="./assets/fonts/manrope.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="./samples/kit.json" as="fetch" crossorigin />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <a class="wordmark" href="./" aria-label="Backbeat home">
+          <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>backbeat<span class="dot">.</span>
+        </a>
+        <p class="kit-line">
+          A real acoustic kit — <strong>Yamaha Recording Custom</strong>, multi-miked, up to 5 velocity layers and
+          round-robin hits.
+        </p>
+        <button class="ghost-btn" id="aboutBtn" type="button">About the sound</button>
+      </header>
+
+      <section class="transport panel" aria-label="Transport">
+        <button class="play" id="playBtn" type="button" aria-label="Play" disabled>
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" /></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5" /></svg>
+          <svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" /></svg>
+        </button>
+
+        <div class="field tempo">
+          <span class="label" id="bpmLabel">Tempo</span>
+          <div class="bpm-box">
+            <button class="step-btn" id="bpmDown" type="button" aria-label="Slower">−</button>
+            <input id="bpm" type="number" inputmode="numeric" min="30" max="260" step="1" aria-labelledby="bpmLabel" />
+            <span class="unit">bpm</span>
+            <button class="step-btn" id="bpmUp" type="button" aria-label="Faster">+</button>
+          </div>
+          <button class="chip" id="tapBtn" type="button" title="Tap tempo (T)">Tap</button>
+        </div>
+
+        <div class="field slider-field">
+          <label class="label" for="swing">Swing <output id="swingOut"></output></label>
+          <input id="swing" type="range" min="50" max="75" step="1" />
+        </div>
+
+        <div class="field slider-field">
+          <label class="label" for="humanize">Humanize <output id="humanizeOut"></output></label>
+          <input id="humanize" type="range" min="0" max="100" step="1" />
+        </div>
+
+        <div class="field patterns-field">
+          <span class="label">Pattern</span>
+          <div class="patterns" id="patterns" role="group" aria-label="Pattern slots"></div>
+          <button class="chip toggle" id="chainBtn" type="button" aria-pressed="false" title="Play A→B→C→D, skipping empty slots">
+            Chain
+          </button>
+        </div>
+
+        <div class="field preset-field">
+          <label class="label" for="preset">Groove</label>
+          <select id="preset"></select>
+        </div>
+
+      </section>
+
+      <section class="toolbar" aria-label="Editing tools">
+        <div class="brushes" id="brushes" role="radiogroup" aria-label="Paint with"></div>
+        <div class="grid-opts">
+          <label class="mini-field">
+            <span>Steps</span>
+            <select id="lengthSel"></select>
+          </label>
+          <label class="mini-field">
+            <span>Grid</span>
+            <select id="divisionSel">
+              <option value="4">16ths</option>
+              <option value="3">Triplets</option>
+            </select>
+          </label>
+          <button class="chip" id="copyBtn" type="button">Copy</button>
+          <button class="chip" id="pasteBtn" type="button" disabled>Paste</button>
+          <button class="chip danger" id="clearBtn" type="button">Clear</button>
+        </div>
+      </section>
+
+      <section class="sequencer panel" aria-label="Step sequencer">
+        <div class="grid-scroll" id="gridScroll">
+          <div class="grid" id="grid"></div>
+        </div>
+        <p class="hint" id="hint">
+          Tap a step to add a hit with the selected dynamic. Tap it again to remove it. Tap an instrument name to hear it.
+        </p>
+      </section>
+
+      <section class="sound panel" aria-label="Sound">
+        <div class="field slider-field">
+          <label class="label" for="room">Room <output id="roomOut"></output></label>
+          <input id="room" type="range" min="0" max="100" step="1" />
+        </div>
+        <div class="field slider-field">
+          <label class="label" for="glue">Glue <output id="glueOut"></output></label>
+          <input id="glue" type="range" min="0" max="100" step="1" />
+        </div>
+        <div class="field slider-field">
+          <label class="label" for="master">Volume <output id="masterOut"></output></label>
+          <input id="master" type="range" min="0" max="100" step="1" />
+          <canvas class="meter" id="meter" width="264" height="6" aria-hidden="true"></canvas>
+        </div>
+        <div class="field seg-field">
+          <span class="label">Stereo view</span>
+          <div class="seg" id="perspective" role="radiogroup" aria-label="Stereo perspective">
+            <button type="button" role="radio" data-v="drummer">Drummer</button>
+            <button type="button" role="radio" data-v="audience">Audience</button>
+          </div>
+        </div>
+        <div class="exports">
+          <button class="chip" id="wavBtn" type="button">Export WAV</button>
+          <button class="chip" id="midiBtn" type="button">Export MIDI</button>
+          <button class="chip" id="shareBtn" type="button">Share link</button>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <p>
+          Samples: <a href="https://github.com/sfzinstruments/WilkinsonAudio.NakedDrums" rel="noopener">Naked Drums</a> by
+          Wilkinson Audio, licensed
+          <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>; SFZ edition by kinwie.
+          Mixed down from the original multi-mic recordings for this app.
+        </p>
+        <p class="keys">Space play/stop · T tap tempo · 1–4 patterns · Shift-click to erase</p>
+      </footer>
+    </div>
+
+    <dialog class="sheet" id="rowDialog" aria-labelledby="rowTitle">
+      <form method="dialog" class="sheet-body" id="rowForm">
+        <div class="sheet-head">
+          <h2 id="rowTitle">Instrument</h2>
+          <button class="icon-btn" value="close" aria-label="Close">✕</button>
+        </div>
+        <label class="stack">
+          <span class="label">Sound</span>
+          <select id="rowVoice"></select>
+        </label>
+        <label class="stack">
+          <span class="label">Level <output id="rowVolOut"></output></span>
+          <input id="rowVol" type="range" min="-24" max="6" step="0.5" />
+        </label>
+        <label class="stack">
+          <span class="label">Pan <output id="rowPanOut"></output></span>
+          <input id="rowPan" type="range" min="-100" max="100" step="1" />
+        </label>
+        <div class="row-toggles">
+          <button type="button" class="chip toggle" id="rowMute" aria-pressed="false">Mute</button>
+          <button type="button" class="chip toggle" id="rowSolo" aria-pressed="false">Solo</button>
+          <button type="button" class="chip" id="rowPreview">Listen</button>
+        </div>
+        <div class="stack">
+          <span class="label">Quick fill</span>
+          <div class="row-toggles">
+            <button type="button" class="chip" data-fill="beat">Every beat</button>
+            <button type="button" class="chip" data-fill="half">Every 8th</button>
+            <button type="button" class="chip" data-fill="all">Every step</button>
+          </div>
+        </div>
+        <div class="stack">
+          <span class="label">Shift</span>
+          <div class="row-toggles">
+            <button type="button" class="chip" data-shift="-1">← Earlier</button>
+            <button type="button" class="chip" data-shift="1">Later →</button>
+            <button type="button" class="chip danger" id="rowClear">Clear row</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="sheet about" id="aboutDialog" aria-labelledby="aboutTitle">
+      <form method="dialog" class="sheet-body">
+        <div class="sheet-head">
+          <h2 id="aboutTitle">Why it sounds real</h2>
+          <button class="icon-btn" value="close" aria-label="Close">✕</button>
+        </div>
+        <p>
+          Every hit is a recording of a real drum. The kit is a Yamaha Recording Custom with a 22″ kick, 10–16″ toms, two
+          snares, and Sabian and Zildjian cymbals. It was recorded through Neve and API preamps, with close mics, overheads,
+          close and far room mics, and a mid-side pair.
+        </p>
+        <p>
+          For this app each hit was mixed from all of those microphones into stereo. The mix follows the library's own
+          default balance and uses the drummer's perspective, so the hi-hat is on the left and the floor tom is on the right.
+        </p>
+        <p>
+          The dynamics you paint choose between recorded strokes, from soft ghost notes to full accents, so a quiet hit also
+          has a softer tone. Repeated hits rotate through different takes, which avoids the "machine-gun" sound. Humanize adds
+          small timing and dynamics changes like a real drummer. Closing the hi-hat cuts off an open hat.
+        </p>
+        <p class="small">
+          Samples: Naked Drums © Wilkinson Audio, CC BY 4.0; SFZ edition by kinwie and the SFZ Instruments project. Changes:
+          mic mixdown, silence trimming, tail fades, and MP3 encoding. Everything runs in your browser, and patterns are saved
+          on this device only.
+        </p>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
